@@ -4,14 +4,15 @@ services:
     container_name: sonycamera-transfer
     restart: unless-stopped
     ports:
-      - "3000:3000"
-      # FTP control + passive range are added in Phase 2, e.g.:
-      # - "21:21"
-      # - "50000-50009:50000-50009"
-    # Pull APP_*, JWT_SECRET, PHOTOS_PATH (and FTP_* from Phase 2) from .env
+      - "8096:3000"
+      # FTP control port + passive data range (values come from .env).
+      - "${FTP_PORT:-21}:${FTP_PORT:-21}"
+      - "${FTP_PASV_MIN:-50000}-${FTP_PASV_MAX:-50009}:${FTP_PASV_MIN:-50000}-${FTP_PASV_MAX:-50009}"
+    # Secrets + FTP settings (APP_*, JWT_SECRET, FTP_*) come from .env
     env_file:
       - .env
-    # Container-specific overrides (these win over .env)
+    # Container-specific overrides — these win over .env, so the dev values
+    # in a stray .env can't point the container at the wrong place.
     environment:
       NODE_ENV: production
       PORT: "3000"
