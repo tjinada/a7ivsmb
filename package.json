@@ -1,0 +1,28 @@
+{
+  "name": "sonycamera-transfer",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PWA: receive Sony A7 IV photos via FTP into an unraid share, browse and download them",
+  "scripts": {
+    "dev": "pnpm --filter @sonycam/shared build && concurrently \"pnpm dev:shared\" \"pnpm dev:backend\" \"pnpm dev:frontend\"",
+    "dev:shared": "pnpm --filter @sonycam/shared build --watch",
+    "dev:frontend": "pnpm --filter @sonycam/frontend dev",
+    "dev:backend": "pnpm --filter @sonycam/backend dev",
+    "build": "pnpm --filter @sonycam/shared build && pnpm --filter @sonycam/backend build && pnpm --filter @sonycam/frontend build",
+    "lint": "pnpm -r lint",
+    "clean": "pnpm -r clean && rimraf node_modules"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp"]
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@10.11.0"
+}

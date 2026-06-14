@@ -1,0 +1,24 @@
+services:
+  sonycamera-transfer:
+    build: .
+    container_name: sonycamera-transfer
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      # FTP control + passive range are added in Phase 2, e.g.:
+      # - "21:21"
+      # - "50000-50009:50000-50009"
+    # Pull APP_*, JWT_SECRET, PHOTOS_PATH (and FTP_* from Phase 2) from .env
+    env_file:
+      - .env
+    # Container-specific overrides (these win over .env)
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATA_DIR: /data
+      PHOTOS_PATH: /photos
+    volumes:
+      # Plain JSON state (FTP config, recent transfers) + thumbnail cache
+      - ./data:/data
+      # The unraid photos share — receive target + gallery root
+      - /mnt/user/data/mekala-share:/photos

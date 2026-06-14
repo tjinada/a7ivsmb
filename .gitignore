@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Env / secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Runtime state, logs, thumbnail cache (mounted volumes in prod)
+data/
+cache/
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
