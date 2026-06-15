@@ -486,16 +486,16 @@ export function GalleryPage() {
                       key={f.path}
                       type="button"
                       onClick={() => setPath(f.path)}
-                      className="group flex items-center gap-3 rounded-xl border border-border bg-surface p-3 text-left transition hover:border-primary-500/50 active:scale-[0.98]"
+                      className="group flex items-start gap-3 rounded-xl border border-border bg-surface p-3 text-left transition hover:border-primary-500/50 active:scale-[0.98]"
                     >
                       <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary-500/10 text-primary-500">
                         <Folder className="h-5 w-5" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-gray-100">{f.name}</span>
-                        <span className="block text-[11px] text-gray-500">Folder</span>
+                        <span className="block break-words text-sm font-medium leading-snug text-gray-100">{f.name}</span>
+                        <span className="mt-0.5 block text-[11px] text-gray-500">Folder</span>
                       </span>
-                      <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-600 transition group-hover:translate-x-0.5 group-hover:text-gray-400" />
+                      <ChevronRight className="mt-3 h-4 w-4 flex-shrink-0 text-gray-600 transition group-hover:translate-x-0.5 group-hover:text-gray-400" />
                     </button>
                   ))}
                 </div>
