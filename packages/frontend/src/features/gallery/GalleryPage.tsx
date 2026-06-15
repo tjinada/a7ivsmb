@@ -175,7 +175,8 @@ export function GalleryPage() {
   return (
     <div className="flex h-full flex-col">
       {/* Breadcrumb bar */}
-      <div className="flex flex-shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border bg-base px-3 py-2.5 text-sm">
+      <div className="flex flex-shrink-0 items-center border-b border-border bg-base px-3 py-2.5 text-sm">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
         {crumbs.map((c, i) => {
           const isLast = i === crumbs.length - 1;
           return (
@@ -194,7 +195,8 @@ export function GalleryPage() {
             </span>
           );
         })}
-        <div className="relative ml-auto flex flex-shrink-0 items-center gap-1">
+        </div>
+        <div className="relative ml-2 flex flex-shrink-0 items-center gap-1">
           {selecting ? (
             <button type="button" onClick={exitSelect} className="rounded-md px-2 py-1 text-xs font-medium text-primary-500">
               Cancel
