@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Folder, ChevronRight, RefreshCw, Loader2, Images, Download } from 'lucide-react';
+import { Folder, ChevronRight, RefreshCw, Loader2, Images, Download, Home } from 'lucide-react';
 import type { ApiResponse, GalleryBrowseResult, GalleryItem } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from './AuthImage';
@@ -11,6 +11,14 @@ async function browse(path: string): Promise<GalleryBrowseResult> {
   const res = await api.get<ApiResponse<GalleryBrowseResult>>('/gallery/browse', { params: { path } });
   if (!res.data.data) throw new Error('Unexpected response');
   return res.data.data;
+}
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+      {children}
+    </h2>
+  );
 }
 
 export function GalleryPage() {
@@ -41,26 +49,35 @@ export function GalleryPage() {
     }
   };
 
+  const hasContent = !!data && (data.folders.length > 0 || data.items.length > 0);
+
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-3 py-2 text-xs">
-        {crumbs.map((c, i) => (
-          <span key={c.path} className="flex items-center gap-1 whitespace-nowrap">
-            {i > 0 && <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-600" />}
-            <button
-              type="button"
-              onClick={() => setPath(c.path)}
-              className={i === crumbs.length - 1 ? 'text-gray-200' : 'text-primary-500'}
-            >
-              {c.name}
-            </button>
-          </span>
-        ))}
+      {/* Breadcrumb bar */}
+      <div className="flex flex-shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border bg-base px-3 py-2.5 text-sm">
+        {crumbs.map((c, i) => {
+          const isLast = i === crumbs.length - 1;
+          return (
+            <span key={c.path} className="flex items-center gap-1.5 whitespace-nowrap">
+              {i > 0 && <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-gray-600" />}
+              <button
+                type="button"
+                onClick={() => setPath(c.path)}
+                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 transition ${
+                  isLast ? 'font-medium text-gray-100' : 'text-primary-500 hover:bg-surface'
+                }`}
+              >
+                {i === 0 && <Home className="h-3.5 w-3.5" />}
+                {c.name}
+              </button>
+            </span>
+          );
+        })}
         <button
           type="button"
           onClick={() => refetch()}
           aria-label="Refresh"
-          className="ml-auto flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg hover:bg-border"
+          className="ml-auto flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-surface hover:text-gray-200"
         >
           <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
         </button>
@@ -78,68 +95,81 @@ export function GalleryPage() {
               Try again
             </button>
           </div>
-        ) : data && (data.folders.length > 0 || data.items.length > 0) ? (
-          <>
-            {data.folders.length > 0 && (
-              <div className="divide-y divide-border">
-                {data.folders.map((f) => (
-                  <button
-                    key={f.path}
-                    type="button"
-                    onClick={() => setPath(f.path)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface"
-                  >
-                    <Folder className="h-5 w-5 flex-shrink-0 text-primary-500" />
-                    <span className="min-w-0 flex-1 truncate text-sm">{f.name}</span>
-                    <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-600" />
-                  </button>
-                ))}
-              </div>
+        ) : hasContent ? (
+          <div className="p-3">
+            {data!.folders.length > 0 && (
+              <section className="mb-5">
+                <SectionLabel>Folders</SectionLabel>
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+                  {data!.folders.map((f) => (
+                    <button
+                      key={f.path}
+                      type="button"
+                      onClick={() => setPath(f.path)}
+                      className="group flex items-center gap-3 rounded-xl border border-border bg-surface p-3 text-left transition hover:border-primary-500/50 active:scale-[0.98]"
+                    >
+                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary-500/10 text-primary-500">
+                        <Folder className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-gray-100">{f.name}</span>
+                        <span className="block text-[11px] text-gray-500">Folder</span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-600 transition group-hover:translate-x-0.5 group-hover:text-gray-400" />
+                    </button>
+                  ))}
+                </div>
+              </section>
             )}
 
-            {data.items.length > 0 && (
-              <div className="grid grid-cols-3 gap-1 p-1 sm:grid-cols-4 md:grid-cols-6">
-                {data.items.map((it) =>
-                  it.kind === 'image' ? (
-                    <button
-                      key={it.path}
-                      type="button"
-                      onClick={() => setActive(it)}
-                      className="aspect-square overflow-hidden rounded-sm bg-surface"
-                    >
-                      <AuthImage
-                        src={`/gallery/thumb?path=${encodeURIComponent(it.path)}`}
-                        alt={it.name}
-                        className="h-full w-full"
-                      />
-                    </button>
-                  ) : (
-                    <button
-                      key={it.path}
-                      type="button"
-                      onClick={() => downloadRaw(it)}
-                      className="flex aspect-square flex-col items-center justify-center gap-1 rounded-sm bg-surface px-1 text-gray-400"
-                    >
-                      {savingPath === it.path ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        <Download className="h-5 w-5" />
-                      )}
-                      <span className="rounded bg-border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide">
-                        RAW
-                      </span>
-                      <span className="max-w-full truncate text-[10px]">{it.name}</span>
-                    </button>
-                  ),
-                )}
-              </div>
+            {data!.items.length > 0 && (
+              <section>
+                {data!.folders.length > 0 && <SectionLabel>Photos</SectionLabel>}
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                  {data!.items.map((it) =>
+                    it.kind === 'image' ? (
+                      <button
+                        key={it.path}
+                        type="button"
+                        onClick={() => setActive(it)}
+                        className="group aspect-square overflow-hidden rounded-lg bg-surface ring-1 ring-border/60 transition hover:ring-primary-500/60"
+                      >
+                        <AuthImage
+                          src={`/gallery/thumb?path=${encodeURIComponent(it.path)}`}
+                          alt={it.name}
+                          className="h-full w-full [&>img]:transition-transform [&>img]:duration-300 group-hover:[&>img]:scale-110"
+                        />
+                      </button>
+                    ) : (
+                      <button
+                        key={it.path}
+                        type="button"
+                        onClick={() => downloadRaw(it)}
+                        className="group flex aspect-square flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-surface p-2 text-gray-400 transition hover:border-primary-500/50 active:scale-[0.98]"
+                      >
+                        {savingPath === it.path ? (
+                          <Loader2 className="h-5 w-5 animate-spin text-primary-500" />
+                        ) : (
+                          <Download className="h-5 w-5 text-gray-500 transition group-hover:text-gray-300" />
+                        )}
+                        <span className="rounded bg-primary-500/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-primary-500">
+                          RAW
+                        </span>
+                        <span className="w-full truncate px-1 text-center text-[10px] text-gray-500">{it.name}</span>
+                      </button>
+                    ),
+                  )}
+                </div>
+              </section>
             )}
-          </>
+          </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-gray-400">
-            <Images className="h-10 w-10 text-gray-600" />
-            <p className="text-sm">This folder is empty.</p>
-            <p className="text-xs text-gray-500">Send photos from the camera over FTP, then refresh.</p>
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface">
+              <Images className="h-8 w-8 text-gray-600" />
+            </div>
+            <p className="text-sm font-medium text-gray-300">This folder is empty</p>
+            <p className="max-w-xs text-xs text-gray-500">Send photos from the camera over FTP, then tap refresh.</p>
           </div>
         )}
       </div>
