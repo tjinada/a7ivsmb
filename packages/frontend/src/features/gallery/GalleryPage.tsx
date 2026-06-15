@@ -1,11 +1,15 @@
-import { useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Folder, ChevronRight, RefreshCw, Loader2, Images, Download, Home } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Folder, ChevronRight, RefreshCw, Loader2, Images, Download, Home, Star, SlidersHorizontal,
+  CheckSquare, CheckCircle2, Circle, Share2, Trash2,
+} from 'lucide-react';
 import type { ApiResponse, GalleryBrowseResult, GalleryItem } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from './AuthImage';
 import { Lightbox } from './Lightbox';
-import { saveImage } from './download';
+import { ConfirmDialog } from './ConfirmDialog';
+import { saveImage, shareItems, downloadZip } from './download';
 
 async function browse(path: string): Promise<GalleryBrowseResult> {
   const res = await api.get<ApiResponse<GalleryBrowseResult>>('/gallery/browse', { params: { path } });
@@ -15,27 +19,101 @@ async function browse(path: string): Promise<GalleryBrowseResult> {
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <h2 className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-      {children}
-    </h2>
+    <h2 className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">{children}</h2>
   );
 }
+
+const RATING_OPTS = [
+  { label: 'All', value: 0 },
+  { label: '★3+', value: 3 },
+  { label: '★4+', value: 4 },
+  { label: '★5', value: 5 },
+];
+const TYPE_OPTS = [
+  { label: 'All', value: 'all' as const },
+  { label: 'JPG', value: 'image' as const },
+  { label: 'RAW', value: 'raw' as const },
+];
+const activeChip = 'rounded-md bg-primary-500 px-2.5 py-1 text-xs font-medium text-white';
+const idleChip = 'rounded-md px-2.5 py-1 text-xs text-gray-400';
 
 export function GalleryPage() {
   const [path, setPath] = useState('');
   const [active, setActive] = useState<GalleryItem | null>(null);
   const [savingPath, setSavingPath] = useState<string | null>(null);
+  const [ratingMin, setRatingMin] = useState(0);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'raw'>('all');
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pendingDelete, setPendingDelete] = useState<GalleryItem[]>([]);
+  const [busy, setBusy] = useState<null | 'share' | 'zip'>(null);
+
+  const qc = useQueryClient();
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['gallery', 'browse', path],
     queryFn: () => browse(path),
   });
 
+  // Reset filters + selection when changing folders.
+  useEffect(() => {
+    setRatingMin(0);
+    setTypeFilter('all');
+    setSelecting(false);
+    setSelected(new Set());
+  }, [path]);
+
+  const rateMut = useMutation({
+    mutationFn: ({ path: p, stars }: { path: string; stars: number }) =>
+      api.put('/gallery/rating', { path: p, stars }),
+    onError: () => {
+      qc.invalidateQueries({ queryKey: ['gallery', 'browse', path] });
+      window.alert('Could not save rating');
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (paths: string[]) => api.post('/gallery/delete', { paths }),
+  });
+
+  const rate = (item: GalleryItem, stars: number) => {
+    qc.setQueryData<GalleryBrowseResult>(['gallery', 'browse', path], (old) =>
+      old ? { ...old, items: old.items.map((i) => (i.path === item.path ? { ...i, rating: stars } : i)) } : old,
+    );
+    setActive((a) => (a && a.path === item.path ? { ...a, rating: stars } : a));
+    rateMut.mutate({ path: item.path, stars });
+  };
+
+  const toggleSelect = (p: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(p)) next.delete(p);
+      else next.add(p);
+      return next;
+    });
+
+  const exitSelect = () => {
+    setSelecting(false);
+    setSelected(new Set());
+  };
+
+  const performDelete = async () => {
+    const paths = pendingDelete.map((i) => i.path);
+    try {
+      await deleteMut.mutateAsync(paths);
+      setActive((a) => (a && paths.includes(a.path) ? null : a));
+      exitSelect();
+      qc.invalidateQueries({ queryKey: ['gallery', 'browse', path] });
+    } catch {
+      window.alert('Delete failed');
+    } finally {
+      setPendingDelete([]);
+    }
+  };
+
   const crumbs = [
     { name: 'Home', path: '' },
-    ...(path
-      ? path.split('/').map((seg, i, arr) => ({ name: seg, path: arr.slice(0, i + 1).join('/') }))
-      : []),
+    ...(path ? path.split('/').map((seg, i, arr) => ({ name: seg, path: arr.slice(0, i + 1).join('/') })) : []),
   ];
 
   const downloadRaw = async (item: GalleryItem) => {
@@ -49,7 +127,50 @@ export function GalleryPage() {
     }
   };
 
-  const hasContent = !!data && (data.folders.length > 0 || data.items.length > 0);
+  const allItems = data?.items ?? [];
+  const shownItems = allItems.filter(
+    (i) => i.rating >= ratingMin && (typeFilter === 'all' || i.kind === typeFilter),
+  );
+  const selectedItems = allItems.filter((i) => selected.has(i.path));
+  const allShownSelected = shownItems.length > 0 && shownItems.every((i) => selected.has(i.path));
+  const hasContent = !!data && (data.folders.length > 0 || allItems.length > 0);
+
+  const toggleSelectAll = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allShownSelected) shownItems.forEach((i) => next.delete(i.path));
+      else shownItems.forEach((i) => next.add(i.path));
+      return next;
+    });
+
+  const bulkShare = async () => {
+    setBusy('share');
+    try {
+      const ok = await shareItems(selectedItems);
+      if (!ok) await downloadZip(selectedItems);
+    } catch {
+      window.alert('Share failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const bulkDownload = async () => {
+    setBusy('zip');
+    try {
+      await downloadZip(selectedItems);
+    } catch {
+      window.alert('Download failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const tileTap = (it: GalleryItem) => {
+    if (selecting) toggleSelect(it.path);
+    else if (it.kind === 'image') setActive(it);
+    else downloadRaw(it);
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -73,15 +194,56 @@ export function GalleryPage() {
             </span>
           );
         })}
-        <button
-          type="button"
-          onClick={() => refetch()}
-          aria-label="Refresh"
-          className="ml-auto flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-surface hover:text-gray-200"
-        >
-          <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="ml-auto flex flex-shrink-0 items-center gap-1">
+          {selecting ? (
+            <button type="button" onClick={exitSelect} className="rounded-md px-2 py-1 text-xs font-medium text-primary-500">
+              Cancel
+            </button>
+          ) : (
+            <>
+              {allItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelecting(true)}
+                  aria-label="Select"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-surface hover:text-gray-200"
+                >
+                  <CheckSquare className="h-4 w-4" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => refetch()}
+                aria-label="Refresh"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-surface hover:text-gray-200"
+              >
+                <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Filter bar */}
+      {allItems.length > 0 && !selecting && (
+        <div className="flex flex-shrink-0 items-center gap-2 overflow-x-auto border-b border-border bg-base px-3 py-2">
+          <SlidersHorizontal className="h-3.5 w-3.5 flex-shrink-0 text-gray-500" />
+          <div className="flex flex-shrink-0 rounded-lg bg-surface p-0.5">
+            {RATING_OPTS.map((o) => (
+              <button key={o.value} type="button" onClick={() => setRatingMin(o.value)} className={ratingMin === o.value ? activeChip : idleChip}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-shrink-0 rounded-lg bg-surface p-0.5">
+            {TYPE_OPTS.map((o) => (
+              <button key={o.value} type="button" onClick={() => setTypeFilter(o.value)} className={typeFilter === o.value ? activeChip : idleChip}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {isLoading ? (
@@ -122,44 +284,66 @@ export function GalleryPage() {
               </section>
             )}
 
-            {data!.items.length > 0 && (
+            {allItems.length > 0 && (
               <section>
                 {data!.folders.length > 0 && <SectionLabel>Photos</SectionLabel>}
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-                  {data!.items.map((it) =>
-                    it.kind === 'image' ? (
-                      <button
-                        key={it.path}
-                        type="button"
-                        onClick={() => setActive(it)}
-                        className="group aspect-square overflow-hidden rounded-lg bg-surface ring-1 ring-border/60 transition hover:ring-primary-500/60"
-                      >
-                        <AuthImage
-                          src={`/gallery/thumb?path=${encodeURIComponent(it.path)}`}
-                          alt={it.name}
-                          className="h-full w-full [&>img]:transition-transform [&>img]:duration-300 group-hover:[&>img]:scale-110"
-                        />
-                      </button>
-                    ) : (
-                      <button
-                        key={it.path}
-                        type="button"
-                        onClick={() => downloadRaw(it)}
-                        className="group flex aspect-square flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-surface p-2 text-gray-400 transition hover:border-primary-500/50 active:scale-[0.98]"
-                      >
-                        {savingPath === it.path ? (
-                          <Loader2 className="h-5 w-5 animate-spin text-primary-500" />
-                        ) : (
-                          <Download className="h-5 w-5 text-gray-500 transition group-hover:text-gray-300" />
-                        )}
-                        <span className="rounded bg-primary-500/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-primary-500">
-                          RAW
-                        </span>
-                        <span className="w-full truncate px-1 text-center text-[10px] text-gray-500">{it.name}</span>
-                      </button>
-                    ),
-                  )}
-                </div>
+                {shownItems.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-gray-500">No photos match this filter.</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                    {shownItems.map((it) => {
+                      const sel = selected.has(it.path);
+                      const isImage = it.kind === 'image';
+                      return (
+                        <button
+                          key={it.path}
+                          type="button"
+                          onClick={() => tileTap(it)}
+                          className={`group relative aspect-square overflow-hidden rounded-lg transition active:scale-[0.98] ${
+                            isImage ? 'bg-surface ring-1 ring-border/60 hover:ring-primary-500/60' : 'flex flex-col items-center justify-center gap-1.5 border border-border bg-surface p-2 text-gray-400 hover:border-primary-500/50'
+                          } ${sel ? 'ring-2 ring-primary-500' : ''}`}
+                        >
+                          {isImage ? (
+                            <AuthImage
+                              src={`/gallery/thumb?path=${encodeURIComponent(it.path)}`}
+                              alt={it.name}
+                              className="h-full w-full [&>img]:transition-transform [&>img]:duration-300 group-hover:[&>img]:scale-110"
+                            />
+                          ) : (
+                            <>
+                              {savingPath === it.path ? (
+                                <Loader2 className="h-5 w-5 animate-spin text-primary-500" />
+                              ) : (
+                                <Download className="h-5 w-5 text-gray-500 transition group-hover:text-gray-300" />
+                              )}
+                              <span className="rounded bg-primary-500/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-primary-500">
+                                RAW
+                              </span>
+                              <span className="w-full truncate px-1 text-center text-[10px] text-gray-500">{it.name}</span>
+                            </>
+                          )}
+
+                          {it.rating > 0 && (
+                            <div className="pointer-events-none absolute bottom-1 left-1 flex items-center gap-0.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-400">
+                              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                              {it.rating}
+                            </div>
+                          )}
+
+                          {selecting && (
+                            <div className="absolute right-1 top-1">
+                              {sel ? (
+                                <CheckCircle2 className="h-5 w-5 fill-primary-500 text-white" />
+                              ) : (
+                                <Circle className="h-5 w-5 text-white/80 drop-shadow" />
+                              )}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             )}
           </div>
@@ -174,7 +358,66 @@ export function GalleryPage() {
         )}
       </div>
 
-      {active && <Lightbox photo={active} onClose={() => setActive(null)} />}
+      {/* Bulk action bar */}
+      {selecting && (
+        <div className="flex flex-shrink-0 items-center gap-3 border-t border-border bg-base px-4 py-2.5">
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-gray-100">{selected.size} selected</span>
+            <button type="button" onClick={toggleSelectAll} className="text-left text-[11px] text-primary-500">
+              {allShownSelected ? 'Clear all' : 'Select all'}
+            </button>
+          </div>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              onClick={bulkShare}
+              disabled={selected.size === 0 || busy !== null}
+              className="flex w-14 flex-col items-center gap-0.5 rounded-lg py-1.5 text-gray-200 transition hover:bg-surface disabled:opacity-40"
+            >
+              {busy === 'share' ? <Loader2 className="h-5 w-5 animate-spin" /> : <Share2 className="h-5 w-5" />}
+              <span className="text-[10px]">Share</span>
+            </button>
+            <button
+              type="button"
+              onClick={bulkDownload}
+              disabled={selected.size === 0 || busy !== null}
+              className="flex w-14 flex-col items-center gap-0.5 rounded-lg py-1.5 text-gray-200 transition hover:bg-surface disabled:opacity-40"
+            >
+              {busy === 'zip' ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+              <span className="text-[10px]">Download</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingDelete(selectedItems)}
+              disabled={selected.size === 0}
+              className="flex w-14 flex-col items-center gap-0.5 rounded-lg py-1.5 text-red-400 transition hover:bg-red-500/10 disabled:opacity-40"
+            >
+              <Trash2 className="h-5 w-5" />
+              <span className="text-[10px]">Delete</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {active && (
+        <Lightbox
+          photo={active}
+          onClose={() => setActive(null)}
+          onRate={(stars) => rate(active, stars)}
+          onDelete={() => setPendingDelete([active])}
+        />
+      )}
+
+      {pendingDelete.length > 0 && (
+        <ConfirmDialog
+          title={pendingDelete.length === 1 ? 'Delete this photo?' : `Delete ${pendingDelete.length} photos?`}
+          message="This permanently removes the file(s) from the share. This can't be undone."
+          confirmLabel="Delete"
+          busy={deleteMut.isPending}
+          onConfirm={performDelete}
+          onCancel={() => setPendingDelete([])}
+        />
+      )}
     </div>
   );
 }

@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react';
-import { X, Download, Loader2 } from 'lucide-react';
+import { X, Download, Loader2, Trash2 } from 'lucide-react';
 import type { GalleryItem } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { saveImage } from './download';
+import { StarRating } from './StarRating';
 
-/** Full-screen enlarge view. Native pinch-zoom; download/share and close. */
-export function Lightbox({ photo, onClose }: { photo: GalleryItem; onClose: () => void }) {
+/** Full-screen enlarge view. Native pinch-zoom; rate, download, delete, close. */
+export function Lightbox({
+  photo,
+  onClose,
+  onRate,
+  onDelete,
+}: {
+  photo: GalleryItem;
+  onClose: () => void;
+  onRate?: (stars: number) => void;
+  onDelete?: () => void;
+}) {
   const [url, setUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -39,7 +50,7 @@ export function Lightbox({ photo, onClose }: { photo: GalleryItem; onClose: () =
 
   return (
     <div className="fixed inset-0 z-[10000] flex flex-col bg-black/95">
-      <div className="flex items-center justify-between gap-3 px-4 py-3 text-white">
+      <div className="flex items-center justify-between gap-2 px-4 py-3 text-white">
         <span className="min-w-0 flex-1 truncate text-sm">{photo.name}</span>
         <button
           type="button"
@@ -50,6 +61,16 @@ export function Lightbox({ photo, onClose }: { photo: GalleryItem; onClose: () =
         >
           {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
         </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label="Delete"
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-red-400 hover:bg-red-500/20"
+          >
+            <Trash2 className="h-5 w-5" />
+          </button>
+        )}
         <button
           type="button"
           onClick={onClose}
@@ -59,6 +80,12 @@ export function Lightbox({ photo, onClose }: { photo: GalleryItem; onClose: () =
           <X className="h-5 w-5" />
         </button>
       </div>
+
+      {onRate && (
+        <div className="flex items-center justify-center pb-2">
+          <StarRating value={photo.rating} onChange={onRate} size={28} />
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-2" onClick={onClose}>
         {url ? (

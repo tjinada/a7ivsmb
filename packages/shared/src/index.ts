@@ -83,6 +83,7 @@ export interface GalleryItem {
   size: number;       // bytes
   modified: number;   // epoch milliseconds
   kind: GalleryItemKind;
+  rating: number;     // 0 = unrated, else 1..5 stars
 }
 
 /** One directory's contents, as returned by GET /api/gallery/browse. */

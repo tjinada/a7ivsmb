@@ -6,6 +6,7 @@ import sharp from 'sharp';
 import { config } from '../../config/index.js';
 import { AppError } from '../../middleware/index.js';
 import type { GalleryBrowseResult, FolderEntry, GalleryItem } from '@sonycam/shared';
+import { loadRatings, getRating, setRating, removeRating } from './ratings.store.js';
 
 // Browser-renderable raster formats → thumbnailable. RAW formats are listed
 // as download-only tiles. Anything else (video, sidecars, etc.) is hidden.
@@ -41,11 +42,23 @@ function safeResolve(rel: string): string {
   return full;
 }
 
+/** The cache file paths (all variants) for a given source file + stat. */
+function cacheFilesFor(file: string, stat: { mtimeMs: number; size: number }): string[] {
+  return (Object.keys(SIZES) as Variant[]).map((variant) => {
+    const { width } = SIZES[variant];
+    const key = createHash('sha1')
+      .update(`${file}|${stat.mtimeMs}|${stat.size}|${variant}|${width}`)
+      .digest('hex');
+    return path.join(config.cacheDir, `${key}.webp`);
+  });
+}
+
 export const galleryService = {
   /** List one directory (non-recursive): subfolders + image/raw items. */
   async browse(rel: string): Promise<GalleryBrowseResult> {
     const root = path.resolve(config.photosPath);
     const dir = safeResolve(rel);
+    await loadRatings();
 
     const stat = await fs.stat(dir).catch(() => {
       throw new AppError('Folder not found', 404);
@@ -74,7 +87,7 @@ export const galleryService = {
       const ext = path.extname(e.name).toLowerCase();
       const kind = DISPLAYABLE.has(ext) ? 'image' : RAW.has(ext) ? 'raw' : null;
       if (!kind) continue;
-      items.push({ path: relPath, name: e.name, size: s.size, modified: s.mtimeMs, kind });
+      items.push({ path: relPath, name: e.name, size: s.size, modified: s.mtimeMs, kind, rating: getRating(relPath) });
     }
 
     // Newest activity first, for both folders and photos.
@@ -85,6 +98,55 @@ export const galleryService = {
     const parent = here === '' ? null : path.posix.dirname(here) === '.' ? '' : path.posix.dirname(here);
 
     return { path: here, parent, folders, items };
+  },
+
+  async rate(rel: string, stars: number): Promise<number> {
+    await loadRatings();
+    const file = safeResolve(rel);
+    const stat = await fs.stat(file).catch(() => {
+      throw new AppError('Not found', 404);
+    });
+    if (!stat.isFile()) throw new AppError('Not a file', 400);
+    const relPosix = toPosix(path.relative(path.resolve(config.photosPath), file));
+    return setRating(relPosix, stars);
+  },
+
+  /** Validate paths for bulk download; returns {abs,name} with de-duped names. */
+  async resolveForZip(rels: string[]): Promise<{ abs: string; name: string }[]> {
+    const out: { abs: string; name: string }[] = [];
+    const seen = new Map<string, number>();
+    for (const rel of rels) {
+      const file = safeResolve(rel);
+      const stat = await fs.stat(file).catch(() => null);
+      if (!stat?.isFile()) continue;
+      let name = path.basename(file);
+      const n = (seen.get(name) ?? 0) + 1;
+      seen.set(name, n);
+      if (n > 1) name = `${n}_${name}`;
+      out.push({ abs: file, name });
+    }
+    if (out.length === 0) throw new AppError('No valid files to download', 400);
+    return out;
+  },
+
+  /** Permanently delete files + their cached renditions + rating entries. */
+  async remove(rels: string[]): Promise<number> {
+    await loadRatings();
+    const root = path.resolve(config.photosPath);
+    let count = 0;
+    for (const rel of rels) {
+      const file = safeResolve(rel);
+      const stat = await fs.stat(file).catch(() => null);
+      if (!stat || !stat.isFile()) continue;
+      for (const cf of cacheFilesFor(file, stat)) {
+        await fs.unlink(cf).catch(() => {});
+      }
+      await fs.unlink(file);
+      await removeRating(toPosix(path.relative(root, file)));
+      count++;
+    }
+    if (count === 0) throw new AppError('No valid files to delete', 400);
+    return count;
   },
 
   async render(rel: string, variant: Variant): Promise<{ data: Buffer; type: string }> {
