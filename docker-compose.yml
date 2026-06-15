@@ -11,15 +11,17 @@ services:
     # Secrets + FTP settings (APP_*, JWT_SECRET, FTP_*) come from .env
     env_file:
       - .env
-    # Container-specific overrides — these win over .env, so the dev values
+    # Container-specific overrides - these win over .env, so the dev values
     # in a stray .env can't point the container at the wrong place.
     environment:
       NODE_ENV: production
       PORT: "3000"
       DATA_DIR: /data
       PHOTOS_PATH: /photos
+      # Local timezone for the date-named photo folders (override via .env).
+      TZ: ${TZ:-America/Toronto}
     volumes:
       # Plain JSON state (FTP config, recent transfers) + thumbnail cache
       - ./data:/data
-      # The unraid photos share — receive target + gallery root
+      # The unraid photos share - receive target + gallery root
       - /mnt/user/data/mekala-share:/photos

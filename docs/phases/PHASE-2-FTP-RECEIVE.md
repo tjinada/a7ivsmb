@@ -53,3 +53,21 @@ Phase 4 monitor has native data with no log-scraping.
   reports `listening: true` and a recent `lastReceived`.
 - Wrong credentials are rejected. Disabled / empty-password → server does not
   start, app still runs.
+
+
+## Addendum - auto-filing received photos (2026-06-14)
+
+Incoming files are filed automatically instead of landing in the share root.
+On each completed STOR, the file is moved into
+`<share>/YYYY-MM-DD/<JPG|RAW>/` - the date is the local day (honors the
+container `TZ`, default `America/Toronto`), and the bucket is `RAW` for raw
+formats (.arw/.dng/etc.) or `JPG` for everything else. Folders are created on
+demand; the date is stamped per file, so a session crossing midnight splits
+correctly. The transfer record stores the final filed path. If the move fails
+for any reason, the original location is recorded as a fallback (the receive
+never fails because of filing).
+
+Implemented in `ftp.service.ts` (`fileIntoFolder` + the STOR handler). `TZ` is
+set in `docker-compose.yml` (overridable via `.env`). Validated live: a JPEG
+and an ARW uploaded over FTP landed in `2026-06-14/JPG/` and `2026-06-14/RAW/`
+respectively, with the Toronto date correct despite a UTC server clock.

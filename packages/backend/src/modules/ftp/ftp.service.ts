@@ -14,6 +14,39 @@ let listening = false;
 let activeConnections = 0;
 let lastReceived: number | null = null;
 
+// RAW formats are filed under a RAW/ bucket; everything else (JPEG, etc.)
+// goes under JPG/. Mirrors the gallery's image/raw split.
+const RAW_EXTS = new Set([
+  '.arw', '.dng', '.cr2', '.cr3', '.nef', '.raf', '.rw2', '.orf', '.srw', '.pef', '.sr2', '.x3f',
+]);
+
+/** Local-time YYYY-MM-DD. Honors the container's TZ env var. */
+function dateFolder(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function bucketFor(name: string): 'RAW' | 'JPG' {
+  return RAW_EXTS.has(path.extname(name).toLowerCase()) ? 'RAW' : 'JPG';
+}
+
+/**
+ * Move a freshly-received file into <share>/YYYY-MM-DD/<JPG|RAW>/, creating
+ * the folders on demand, and return its final absolute path. The date is
+ * stamped per file, so a session that crosses midnight splits correctly.
+ */
+async function fileIntoFolder(abs: string): Promise<string> {
+  const name = path.basename(abs);
+  const destDir = path.join(config.photosPath, dateFolder(), bucketFor(name));
+  const dest = path.join(destDir, name);
+  if (dest === abs) return abs;
+  await fs.mkdir(destDir, { recursive: true });
+  await fs.rename(abs, dest);
+  return dest;
+}
+
 function record(absPath: string, size: number, ip: string): void {
   const evt: TransferEvent = {
     name: path.basename(absPath),
@@ -51,7 +84,7 @@ export async function startFtp(): Promise<void> {
     return;
   }
   if (!cfg.pass) {
-    logger.warn('FTP is enabled but no password is set — refusing to start an open server', 'FTP');
+    logger.warn('FTP is enabled but no password is set - refusing to start an open server', 'FTP');
     return;
   }
 
@@ -72,7 +105,7 @@ export async function startFtp(): Promise<void> {
       cert: await fs.readFile(config.ftp.tlsCertPath),
     };
   } else if (cfg.ftpsEnabled) {
-    logger.warn('FTPS is enabled but key/cert paths are missing — running plain FTP', 'FTP');
+    logger.warn('FTPS is enabled but key/cert paths are missing - running plain FTP', 'FTP');
   }
 
   const srv = new FtpSrv(options);
@@ -91,9 +124,14 @@ export async function startFtp(): Promise<void> {
         return;
       }
       const abs = path.isAbsolute(fileName) ? fileName : path.join(config.photosPath, fileName);
-      fs.stat(abs)
-        .then((s) => record(abs, s.size, ip))
-        .catch(() => record(abs, 0, ip));
+      fileIntoFolder(abs)
+        .then((dest) => fs.stat(dest).then((s) => record(dest, s.size, ip)))
+        .catch((err: unknown) => {
+          logger.error('FTP auto-file failed', 'FTP', err as Error);
+          fs.stat(abs)
+            .then((s) => record(abs, s.size, ip))
+            .catch(() => record(abs, 0, ip));
+        });
     });
 
     // Sandbox: ftp-srv roots its default FileSystem at `root`, which clamps
@@ -111,7 +149,7 @@ export async function startFtp(): Promise<void> {
   listening = true;
   logger.info(
     `FTP receive listening on :${cfg.port} (passive ${cfg.pasvMin}-${cfg.pasvMax}` +
-      `${cfg.externalIp ? `, PASV ${cfg.externalIp}` : ''}) → ${config.photosPath}`,
+      `${cfg.externalIp ? `, PASV ${cfg.externalIp}` : ''}) -> ${config.photosPath}`,
     'FTP',
   );
 }
