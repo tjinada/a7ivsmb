@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState, type TouchEvent } from 'react';
-import { X, Download, Loader2, Trash2, ChevronLeft, ChevronRight, ImageOff } from 'lucide-react';
-import type { GalleryItem } from '@sonycam/shared';
+import { useEffect, useRef, useState, type TouchEvent, type ReactNode } from 'react';
+import {
+  X, Download, Loader2, Trash2, ChevronLeft, ChevronRight, ImageOff, Info, MapPin,
+} from 'lucide-react';
+import type { GalleryItem, ExifInfo, ApiResponse } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { saveImage } from './download';
 import { StarRating } from './StarRating';
 
 /**
  * Full-screen enlarge view. Native pinch-zoom; rate, download, delete, close,
- * and move between images in the folder via arrows, swipe, or keyboard.
+ * inspect EXIF, and move between images via arrows, swipe, or keyboard.
  */
 export function Lightbox({
   photo,
@@ -31,6 +33,9 @@ export function Lightbox({
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
+  const [exif, setExif] = useState<ExifInfo | null>(null);
+  const [exifLoading, setExifLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -50,6 +55,22 @@ export function Lightbox({
       if (obj) URL.revokeObjectURL(obj);
     };
   }, [photo.path]);
+
+  // Fetch EXIF lazily — only while the info panel is open, refetching per photo.
+  useEffect(() => {
+    if (!showInfo) return;
+    let active = true;
+    setExif(null);
+    setExifLoading(true);
+    api
+      .get<ApiResponse<ExifInfo>>(`/gallery/exif?path=${encodeURIComponent(photo.path)}`)
+      .then((res) => active && setExif(res.data.data ?? {}))
+      .catch(() => active && setExif({}))
+      .finally(() => active && setExifLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [showInfo, photo.path]);
 
   // Keyboard navigation (desktop): arrows move, Esc closes.
   useEffect(() => {
@@ -108,6 +129,16 @@ export function Lightbox({
           {photo.name}
           {showCount && <span className="ml-2 text-xs text-white/50">{index! + 1} / {total}</span>}
         </span>
+        <button
+          type="button"
+          onClick={() => setShowInfo((v) => !v)}
+          aria-label="Info"
+          className={`flex h-9 w-9 items-center justify-center rounded-lg transition ${
+            showInfo ? 'bg-primary-500 text-white' : 'bg-white/10 hover:bg-white/20'
+          }`}
+        >
+          <Info className="h-5 w-5" />
+        </button>
         <button
           type="button"
           onClick={download}
@@ -203,7 +234,88 @@ export function Lightbox({
             <ChevronRight className="h-6 w-6" />
           </button>
         )}
+
+        {showInfo && (
+          <div
+            className="absolute inset-x-0 bottom-0 z-10 max-h-[60%] overflow-y-auto border-t border-white/10 bg-black/85 px-4 pb-3 pt-3 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExifPanel exif={exif} loading={exifLoading} />
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-0.5">
+      <span className="flex-shrink-0 text-white/40">{label}</span>
+      <span className="min-w-0 truncate text-right text-white/90">{value}</span>
+    </div>
+  );
+}
+
+function ExifPanel({ exif, loading }: { exif: ExifInfo | null; loading: boolean }) {
+  if (loading || !exif) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-3 text-sm text-white/60">
+        <Loader2 className="h-4 w-4 animate-spin" /> Reading metadata&hellip;
+      </div>
+    );
+  }
+
+  const camera =
+    exif.model && exif.make && !exif.model.toLowerCase().includes(exif.make.toLowerCase())
+      ? `${exif.make} ${exif.model}`
+      : exif.model ?? exif.make;
+  const focal = exif.focalLength
+    ? exif.focalLength + (exif.focalLength35 ? ` (${exif.focalLength35} eq)` : '')
+    : undefined;
+  const chips = [exif.aperture, exif.shutter, exif.iso, focal].filter(Boolean) as string[];
+  const taken = exif.dateTime?.replace(':', '-').replace(':', '-');
+  const mapUrl = exif.gps
+    ? `https://www.google.com/maps/search/?api=1&query=${exif.gps.lat},${exif.gps.lng}`
+    : null;
+
+  const rows: { label: string; value: ReactNode }[] = [];
+  if (camera) rows.push({ label: 'Camera', value: camera });
+  if (exif.lens) rows.push({ label: 'Lens', value: exif.lens });
+  if (exif.exposureComp) rows.push({ label: 'Exposure comp', value: exif.exposureComp });
+  if (exif.dimensions) rows.push({ label: 'Dimensions', value: exif.dimensions });
+  if (taken) rows.push({ label: 'Taken', value: taken });
+
+  if (chips.length === 0 && rows.length === 0 && !mapUrl) {
+    return <p className="py-3 text-center text-sm text-white/60">No metadata available.</p>;
+  }
+
+  return (
+    <div className="mx-auto max-w-md">
+      {chips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-white">
+          {chips.map((c) => (
+            <span key={c}>{c}</span>
+          ))}
+        </div>
+      )}
+      {rows.length > 0 && (
+        <dl className="mt-2 text-xs">
+          {rows.map((r) => (
+            <InfoRow key={r.label} label={r.label} value={r.value} />
+          ))}
+        </dl>
+      )}
+      {mapUrl && (
+        <a
+          href={mapUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs text-white transition hover:bg-white/20"
+        >
+          <MapPin className="h-3.5 w-3.5" /> View on map
+        </a>
+      )}
     </div>
   );
 }

@@ -79,6 +79,9 @@ export function CleanupDialog({
             </span>
           )}
         </p>
+        {n > 0 && (
+          <p className="mt-1.5 text-[11px] text-gray-500">Matching RAW/JPG pairs are deleted together.</p>
+        )}
 
         <div className="mt-5 flex gap-2">
           <button

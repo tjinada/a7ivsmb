@@ -2,14 +2,17 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Folder, ChevronRight, RefreshCw, Loader2, Images, Download, Home, Star, SlidersHorizontal,
-  CheckSquare, CheckCircle2, Circle, Share2, Trash2, MoreVertical,
+  CheckSquare, CheckCircle2, Circle, Share2, Trash2, MoreVertical, CalendarDays,
 } from 'lucide-react';
-import type { ApiResponse, GalleryBrowseResult, GalleryItem } from '@sonycam/shared';
+import type {
+  ApiResponse, GalleryBrowseResult, GalleryTimelineResult, GalleryItem,
+} from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from './AuthImage';
 import { Lightbox } from './Lightbox';
 import { ConfirmDialog } from './ConfirmDialog';
 import { CleanupDialog } from './CleanupDialog';
+import { StarRating } from './StarRating';
 import { shareItems, downloadZip } from './download';
 
 async function browse(path: string): Promise<GalleryBrowseResult> {
@@ -18,10 +21,31 @@ async function browse(path: string): Promise<GalleryBrowseResult> {
   return res.data.data;
 }
 
+async function fetchTimeline(): Promise<GalleryTimelineResult> {
+  const res = await api.get<ApiResponse<GalleryTimelineResult>>('/gallery/timeline');
+  if (!res.data.data) throw new Error('Unexpected response');
+  return res.data.data;
+}
+
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <h2 className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">{children}</h2>
   );
+}
+
+/** Group key for the timeline: the date-folder segment if present, else mtime. */
+function dateKey(it: GalleryItem): string {
+  const seg = it.path.split('/')[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(seg)) return seg;
+  const d = new Date(it.modified);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function prettyDate(key: string): string {
+  const m = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return key;
+  const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 const RATING_OPTS = [0, 3, 4, 5];
@@ -34,6 +58,7 @@ const activeChip = 'flex items-center rounded-md bg-primary-500 px-2.5 py-1 text
 const idleChip = 'flex items-center rounded-md px-2.5 py-1 text-xs text-gray-400 hover:text-gray-200';
 
 export function GalleryPage() {
+  const [view, setView] = useState<'folders' | 'timeline'>('folders');
   const [path, setPath] = useState('');
   const [active, setActive] = useState<GalleryItem | null>(null);
   const [ratingMin, setRatingMin] = useState(0);
@@ -44,13 +69,37 @@ export function GalleryPage() {
   const [busy, setBusy] = useState<null | 'share' | 'zip'>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [ratePickerOpen, setRatePickerOpen] = useState(false);
 
   const qc = useQueryClient();
+  const isTimeline = view === 'timeline';
 
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+  const browseQuery = useQuery({
     queryKey: ['gallery', 'browse', path],
     queryFn: () => browse(path),
+    enabled: !isTimeline,
   });
+  const timelineQuery = useQuery({
+    queryKey: ['gallery', 'timeline'],
+    queryFn: fetchTimeline,
+    enabled: isTimeline,
+  });
+
+  const activeQuery = isTimeline ? timelineQuery : browseQuery;
+  const { isLoading, isError, isFetching } = activeQuery;
+  const refetch = activeQuery.refetch;
+  const activeKey = isTimeline ? ['gallery', 'timeline'] : ['gallery', 'browse', path];
+
+  const folders = !isTimeline ? browseQuery.data?.folders ?? [] : [];
+  const allItems = isTimeline ? timelineQuery.data?.items ?? [] : browseQuery.data?.items ?? [];
+  const truncated = isTimeline ? timelineQuery.data?.truncated ?? false : false;
+
+  // Patch the items array of whichever query is currently showing.
+  const patchActive = (fn: (items: GalleryItem[]) => GalleryItem[]) => {
+    qc.setQueryData(activeKey, (old: { items: GalleryItem[] } | undefined) =>
+      old ? { ...old, items: fn(old.items) } : old,
+    );
+  };
 
   // Reset filters + selection + menus when changing folders.
   useEffect(() => {
@@ -60,14 +109,33 @@ export function GalleryPage() {
     setSelected(new Set());
     setMenuOpen(false);
     setCleanupOpen(false);
+    setRatePickerOpen(false);
   }, [path]);
+
+  // Switching view drops the current selection/menus (different item set).
+  useEffect(() => {
+    setSelecting(false);
+    setSelected(new Set());
+    setMenuOpen(false);
+    setCleanupOpen(false);
+    setRatePickerOpen(false);
+  }, [view]);
 
   const rateMut = useMutation({
     mutationFn: ({ path: p, stars }: { path: string; stars: number }) =>
       api.put('/gallery/rating', { path: p, stars }),
     onError: () => {
-      qc.invalidateQueries({ queryKey: ['gallery', 'browse', path] });
+      qc.invalidateQueries({ queryKey: ['gallery'] });
       window.alert('Could not save rating');
+    },
+  });
+
+  const rateBulkMut = useMutation({
+    mutationFn: ({ paths, stars }: { paths: string[]; stars: number }) =>
+      api.post('/gallery/rate-bulk', { paths, stars }),
+    onError: () => {
+      qc.invalidateQueries({ queryKey: ['gallery'] });
+      window.alert('Could not rate photos');
     },
   });
 
@@ -76,8 +144,10 @@ export function GalleryPage() {
   });
 
   const rate = (item: GalleryItem, stars: number) => {
-    qc.setQueryData<GalleryBrowseResult>(['gallery', 'browse', path], (old) =>
-      old ? { ...old, items: old.items.map((i) => (i.path === item.path ? { ...i, rating: stars } : i)) } : old,
+    patchActive((items) =>
+      items.map((i) =>
+        i.path === item.path || (item.twin && i.path === item.twin) ? { ...i, rating: stars } : i,
+      ),
     );
     setActive((a) => (a && a.path === item.path ? { ...a, rating: stars } : a));
     rateMut.mutate({ path: item.path, stars });
@@ -94,6 +164,7 @@ export function GalleryPage() {
   const exitSelect = () => {
     setSelecting(false);
     setSelected(new Set());
+    setRatePickerOpen(false);
   };
 
   const deleteItems = async (items: GalleryItem[]) => {
@@ -103,7 +174,7 @@ export function GalleryPage() {
       await deleteMut.mutateAsync(paths);
       setActive((a) => (a && paths.includes(a.path) ? null : a));
       exitSelect();
-      qc.invalidateQueries({ queryKey: ['gallery', 'browse', path] });
+      qc.invalidateQueries({ queryKey: ['gallery'] });
     } catch {
       window.alert('Delete failed');
     }
@@ -124,17 +195,29 @@ export function GalleryPage() {
     ...(path ? path.split('/').map((seg, i, arr) => ({ name: seg, path: arr.slice(0, i + 1).join('/') })) : []),
   ];
 
-  const allItems = data?.items ?? [];
   const shownItems = allItems.filter(
     (i) => i.rating >= ratingMin && (typeFilter === 'all' || i.kind === typeFilter),
   );
   const selectedItems = allItems.filter((i) => selected.has(i.path));
-  // Everything in this folder the lightbox can page through. RAW now previews
-  // via its embedded JPEG, so it's included alongside images.
+  // Everything the lightbox can page through. RAW previews via its embedded
+  // JPEG, so it's included alongside images.
   const viewable = shownItems;
   const activeIndex = active ? viewable.findIndex((i) => i.path === active.path) : -1;
   const allShownSelected = shownItems.length > 0 && shownItems.every((i) => selected.has(i.path));
-  const hasContent = !!data && (data.folders.length > 0 || allItems.length > 0);
+  const hasContent = isTimeline
+    ? allItems.length > 0
+    : !!browseQuery.data && (folders.length > 0 || allItems.length > 0);
+
+  // Timeline: bucket the (already newest-first) photos into date sections.
+  const groups: { date: string; items: GalleryItem[] }[] = [];
+  if (isTimeline) {
+    for (const it of shownItems) {
+      const d = dateKey(it);
+      const last = groups[groups.length - 1];
+      if (last && last.date === d) last.items.push(it);
+      else groups.push({ date: d, items: [it] });
+    }
+  }
 
   const toggleSelectAll = () =>
     setSelected((prev) => {
@@ -167,35 +250,132 @@ export function GalleryPage() {
     }
   };
 
+  const bulkRate = (stars: number) => {
+    const items = selectedItems;
+    if (items.length === 0) return;
+    const affected = new Set(selected);
+    items.forEach((i) => i.twin && affected.add(i.twin));
+    patchActive((list) => list.map((i) => (affected.has(i.path) ? { ...i, rating: stars } : i)));
+    rateBulkMut.mutate({ paths: items.map((i) => i.path), stars });
+  };
+
   const tileTap = (it: GalleryItem) => {
     if (selecting) toggleSelect(it.path);
     else setActive(it);
   };
 
+  const renderTile = (it: GalleryItem) => {
+    const sel = selected.has(it.path);
+    const isRaw = it.kind === 'raw';
+    return (
+      <button
+        key={it.path}
+        type="button"
+        onClick={() => tileTap(it)}
+        className={`group relative aspect-square overflow-hidden rounded-lg bg-surface ring-1 transition active:scale-[0.98] ${
+          sel ? 'ring-2 ring-primary-500' : 'ring-border/60 hover:ring-primary-500/60'
+        }`}
+      >
+        <AuthImage
+          src={`/gallery/thumb?path=${encodeURIComponent(it.path)}`}
+          alt={it.name}
+          className="h-full w-full [&>img]:transition-transform [&>img]:duration-300 group-hover:[&>img]:scale-110"
+          fallback={
+            <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 p-2">
+              <Download className="h-5 w-5 text-gray-500" />
+              <span className="w-full truncate px-1 text-center text-[10px] text-gray-500">{it.name}</span>
+            </div>
+          }
+        />
+
+        {isRaw && (
+          <div className="pointer-events-none absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-primary-300">
+            RAW
+          </div>
+        )}
+
+        {it.twin && (
+          <div
+            className={`pointer-events-none absolute left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-emerald-300 ${
+              isRaw ? 'top-[1.55rem]' : 'top-1'
+            }`}
+          >
+            {isRaw ? '+JPG' : '+RAW'}
+          </div>
+        )}
+
+        {it.rating > 0 && (
+          <div className="pointer-events-none absolute bottom-1 left-1 flex items-center gap-0.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-400">
+            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+            {it.rating}
+          </div>
+        )}
+
+        {selecting && (
+          <div className="absolute right-1 top-1">
+            {sel ? (
+              <CheckCircle2 className="h-5 w-5 fill-primary-500 text-white" />
+            ) : (
+              <Circle className="h-5 w-5 text-white/80 drop-shadow" />
+            )}
+          </div>
+        )}
+      </button>
+    );
+  };
+
   return (
     <div className="flex h-full flex-col">
-      {/* Breadcrumb bar */}
+      {/* Top bar: view toggle + breadcrumb + actions */}
       <div className="flex flex-shrink-0 items-center border-b border-border bg-base px-3 py-2.5 text-sm">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
-        {crumbs.map((c, i) => {
-          const isLast = i === crumbs.length - 1;
-          return (
-            <span key={c.path} className="flex items-center gap-1.5 whitespace-nowrap">
-              {i > 0 && <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-gray-600" />}
-              <button
-                type="button"
-                onClick={() => setPath(c.path)}
-                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 transition ${
-                  isLast ? 'font-medium text-gray-100' : 'text-primary-500 hover:bg-surface'
-                }`}
-              >
-                {i === 0 && <Home className="h-3.5 w-3.5" />}
-                {c.name}
-              </button>
-            </span>
-          );
-        })}
+        <div className="mr-2 flex flex-shrink-0 rounded-lg bg-surface p-0.5">
+          <button
+            type="button"
+            onClick={() => setView('folders')}
+            aria-label="Folders"
+            className={`flex h-7 w-8 items-center justify-center rounded-md transition ${
+              !isTimeline ? 'bg-primary-500 text-white' : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <Folder className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setView('timeline')}
+            aria-label="Timeline"
+            className={`flex h-7 w-8 items-center justify-center rounded-md transition ${
+              isTimeline ? 'bg-primary-500 text-white' : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <CalendarDays className="h-4 w-4" />
+          </button>
         </div>
+
+        {isTimeline ? (
+          <span className="min-w-0 flex-1 truncate font-medium text-gray-100">All photos</span>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+            {crumbs.map((c, i) => {
+              const isLast = i === crumbs.length - 1;
+              return (
+                <span key={c.path} className="flex items-center gap-1.5 whitespace-nowrap">
+                  {i > 0 && <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-gray-600" />}
+                  <button
+                    type="button"
+                    onClick={() => setPath(c.path)}
+                    className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 transition ${
+                      isLast ? 'font-medium text-gray-100' : 'text-primary-500 hover:bg-surface'
+                    }`}
+                  >
+                    {i === 0 && <Home className="h-3.5 w-3.5" />}
+                    {c.name}
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
         <div className="relative ml-2 flex flex-shrink-0 items-center gap-1">
           {selecting ? (
             <button type="button" onClick={exitSelect} className="rounded-md px-2 py-1 text-xs font-medium text-primary-500">
@@ -290,18 +470,18 @@ export function GalleryPage() {
           </div>
         ) : isError ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-gray-400">
-            <p className="text-sm">Couldn&rsquo;t load this folder.</p>
+            <p className="text-sm">Couldn&rsquo;t load {isTimeline ? 'the timeline' : 'this folder'}.</p>
             <button type="button" onClick={() => refetch()} className="text-xs text-primary-500">
               Try again
             </button>
           </div>
         ) : hasContent ? (
           <div className="p-3">
-            {data!.folders.length > 0 && (
+            {!isTimeline && folders.length > 0 && (
               <section className="mb-5">
                 <SectionLabel>Folders</SectionLabel>
                 <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-                  {data!.folders.map((f) => (
+                  {folders.map((f) => (
                     <button
                       key={f.path}
                       type="button"
@@ -322,65 +502,44 @@ export function GalleryPage() {
               </section>
             )}
 
-            {allItems.length > 0 && (
-              <section>
-                {data!.folders.length > 0 && <SectionLabel>Photos</SectionLabel>}
-                {shownItems.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-gray-500">No photos match this filter.</p>
-                ) : (
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-                    {shownItems.map((it) => {
-                      const sel = selected.has(it.path);
-                      const isRaw = it.kind === 'raw';
-                      return (
-                        <button
-                          key={it.path}
-                          type="button"
-                          onClick={() => tileTap(it)}
-                          className={`group relative aspect-square overflow-hidden rounded-lg bg-surface ring-1 transition active:scale-[0.98] ${
-                            sel ? 'ring-2 ring-primary-500' : 'ring-border/60 hover:ring-primary-500/60'
-                          }`}
-                        >
-                          <AuthImage
-                            src={`/gallery/thumb?path=${encodeURIComponent(it.path)}`}
-                            alt={it.name}
-                            className="h-full w-full [&>img]:transition-transform [&>img]:duration-300 group-hover:[&>img]:scale-110"
-                            fallback={
-                              <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 p-2">
-                                <Download className="h-5 w-5 text-gray-500" />
-                                <span className="w-full truncate px-1 text-center text-[10px] text-gray-500">{it.name}</span>
-                              </div>
-                            }
-                          />
-
-                          {isRaw && (
-                            <div className="pointer-events-none absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-primary-300">
-                              RAW
-                            </div>
-                          )}
-
-                          {it.rating > 0 && (
-                            <div className="pointer-events-none absolute bottom-1 left-1 flex items-center gap-0.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-400">
-                              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                              {it.rating}
-                            </div>
-                          )}
-
-                          {selecting && (
-                            <div className="absolute right-1 top-1">
-                              {sel ? (
-                                <CheckCircle2 className="h-5 w-5 fill-primary-500 text-white" />
-                              ) : (
-                                <Circle className="h-5 w-5 text-white/80 drop-shadow" />
-                              )}
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
+            {isTimeline ? (
+              groups.length === 0 ? (
+                <p className="py-8 text-center text-sm text-gray-500">No photos match this filter.</p>
+              ) : (
+                <>
+                  {groups.map((g) => (
+                    <section key={g.date} className="mb-5">
+                      <div className="sticky top-0 z-10 -mx-3 mb-2 bg-base/95 px-3 py-1.5 backdrop-blur">
+                        <h2 className="text-xs font-semibold text-gray-300">
+                          {prettyDate(g.date)}
+                          <span className="ml-1.5 text-gray-500">{g.items.length}</span>
+                        </h2>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                        {g.items.map(renderTile)}
+                      </div>
+                    </section>
+                  ))}
+                  {truncated && (
+                    <p className="py-3 text-center text-xs text-gray-500">
+                      Showing the most recent {allItems.length} photos.
+                    </p>
+                  )}
+                </>
+              )
+            ) : (
+              allItems.length > 0 && (
+                <section>
+                  {folders.length > 0 && <SectionLabel>Photos</SectionLabel>}
+                  {shownItems.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-gray-500">No photos match this filter.</p>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                      {shownItems.map(renderTile)}
+                    </div>
+                  )}
+                </section>
+              )
             )}
           </div>
         ) : (
@@ -388,7 +547,7 @@ export function GalleryPage() {
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface">
               <Images className="h-8 w-8 text-gray-600" />
             </div>
-            <p className="text-sm font-medium text-gray-300">This folder is empty</p>
+            <p className="text-sm font-medium text-gray-300">{isTimeline ? 'No photos yet' : 'This folder is empty'}</p>
             <p className="max-w-xs text-xs text-gray-500">Send photos from the camera over FTP, then tap refresh.</p>
           </div>
         )}
@@ -396,7 +555,7 @@ export function GalleryPage() {
 
       {/* Bulk action bar */}
       {selecting && (
-        <div className="flex flex-shrink-0 items-center gap-3 border-t border-border bg-base px-4 py-2.5">
+        <div className="relative flex flex-shrink-0 items-center gap-3 border-t border-border bg-base px-4 py-2.5">
           <div className="flex flex-col">
             <span className="text-sm font-medium text-gray-100">{selected.size} selected</span>
             <button type="button" onClick={toggleSelectAll} className="text-left text-[11px] text-primary-500">
@@ -404,6 +563,15 @@ export function GalleryPage() {
             </button>
           </div>
           <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setRatePickerOpen((o) => !o)}
+              disabled={selected.size === 0}
+              className="flex w-14 flex-col items-center gap-0.5 rounded-lg py-1.5 text-gray-200 transition hover:bg-surface disabled:opacity-40"
+            >
+              <Star className="h-5 w-5" />
+              <span className="text-[10px]">Rate</span>
+            </button>
             <button
               type="button"
               onClick={bulkShare}
@@ -432,6 +600,33 @@ export function GalleryPage() {
               <span className="text-[10px]">Delete</span>
             </button>
           </div>
+
+          {ratePickerOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setRatePickerOpen(false)} />
+              <div className="absolute bottom-full right-3 z-50 mb-2 rounded-xl border border-border bg-surface p-3 shadow-xl">
+                <p className="mb-2 text-xs text-gray-400">Rate {selected.size} selected</p>
+                <StarRating
+                  value={0}
+                  size={26}
+                  onChange={(s) => {
+                    bulkRate(s);
+                    setRatePickerOpen(false);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    bulkRate(0);
+                    setRatePickerOpen(false);
+                  }}
+                  className="mt-2 text-[11px] text-gray-400 transition hover:text-gray-200"
+                >
+                  Clear rating
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -455,7 +650,9 @@ export function GalleryPage() {
       {pendingDelete.length > 0 && (
         <ConfirmDialog
           title={pendingDelete.length === 1 ? 'Delete this photo?' : `Delete ${pendingDelete.length} photos?`}
-          message="This permanently removes the file(s) from the share. This can't be undone."
+          message={`This permanently removes the file(s) from the share. This can't be undone.${
+            pendingDelete.some((i) => i.twin) ? ' Matching RAW/JPG pairs are removed together.' : ''
+          }`}
           confirmLabel="Delete"
           busy={deleteMut.isPending}
           onConfirm={performDelete}

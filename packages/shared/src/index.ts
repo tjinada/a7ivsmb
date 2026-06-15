@@ -85,6 +85,29 @@ export interface GalleryItem {
   modified: number;   // epoch milliseconds
   kind: GalleryItemKind;
   rating: number;     // 0 = unrated, else 1..5 stars
+  twin?: string;      // paired JPG/RAW counterpart (share-relative), if any
+}
+
+/** Camera metadata for one photo, returned by GET /api/gallery/exif. */
+export interface ExifInfo {
+  make?: string;
+  model?: string;
+  lens?: string;
+  focalLength?: string;
+  focalLength35?: string;
+  aperture?: string;        // e.g. "f/2.8"
+  shutter?: string;         // e.g. "1/250s"
+  iso?: string;             // e.g. "ISO 100"
+  exposureComp?: string;
+  dateTime?: string;        // raw "YYYY:MM:DD HH:MM:SS"
+  dimensions?: string;      // e.g. "7008x4672"
+  gps?: { lat: number; lng: number } | null;
+}
+
+/** Flat, newest-first photo stream returned by GET /api/gallery/timeline. */
+export interface GalleryTimelineResult {
+  items: GalleryItem[];
+  truncated: boolean;       // true if more photos exist than the returned cap
 }
 
 /** One directory's contents, as returned by GET /api/gallery/browse. */

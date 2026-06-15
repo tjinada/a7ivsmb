@@ -6,7 +6,14 @@ import type { Readable } from 'node:stream';
 import sharp from 'sharp';
 import { config } from '../../config/index.js';
 import { AppError } from '../../middleware/index.js';
-import type { GalleryBrowseResult, FolderEntry, GalleryItem } from '@sonycam/shared';
+import type {
+  GalleryBrowseResult,
+  FolderEntry,
+  GalleryItem,
+  GalleryItemKind,
+  ExifInfo,
+  GalleryTimelineResult,
+} from '@sonycam/shared';
 import { loadRatings, getRating, setRating, removeRating } from './ratings.store.js';
 
 // Browser-renderable raster formats. RAW formats are previewed via their
@@ -31,6 +38,163 @@ const MIME: Record<string, string> = {
 };
 
 const toPosix = (p: string) => p.split(path.sep).join('/');
+
+/** Classify a filename into a gallery kind, or null if it's not a photo. */
+function kindOf(name: string): GalleryItemKind | null {
+  const ext = path.extname(name).toLowerCase();
+  return DISPLAYABLE.has(ext) ? 'image' : RAW.has(ext) ? 'raw' : null;
+}
+
+/**
+ * Key that a JPG and its RAW counterpart share. The Sony filer drops each shot
+ * into sibling `<date>/JPG` and `<date>/RAW` folders, so we key on the shared
+ * grandparent + basename. Files paired inside one folder key on their own dir.
+ */
+function pairKey(relPath: string): string {
+  const parts = relPath.split('/');
+  const file = parts[parts.length - 1];
+  const base = file.slice(0, file.length - path.extname(file).length).toLowerCase();
+  const parent = (parts[parts.length - 2] ?? '').toUpperCase();
+  if (parent === 'JPG' || parent === 'RAW') {
+    return `${parts.slice(0, parts.length - 2).join('/')}::${base}`;
+  }
+  return `${parts.slice(0, parts.length - 1).join('/')}::${base}`;
+}
+
+/** Build a relPath -> twin relPath map from a flat list of photo entries. */
+function computeTwins(entries: { relPath: string; kind: GalleryItemKind }[]): Map<string, string> {
+  const groups = new Map<string, { image?: string; raw?: string }>();
+  for (const e of entries) {
+    const k = pairKey(e.relPath);
+    let g = groups.get(k);
+    if (!g) {
+      g = {};
+      groups.set(k, g);
+    }
+    if (e.kind === 'image') g.image ??= e.relPath;
+    else g.raw ??= e.relPath;
+  }
+  const twins = new Map<string, string>();
+  for (const g of groups.values()) {
+    if (g.image && g.raw) {
+      twins.set(g.image, g.raw);
+      twins.set(g.raw, g.image);
+    }
+  }
+  return twins;
+}
+
+/** List the photo entries (rel + kind) directly inside one folder. */
+async function photoEntriesIn(absDir: string, root: string): Promise<{ relPath: string; kind: GalleryItemKind }[]> {
+  const out: { relPath: string; kind: GalleryItemKind }[] = [];
+  let dirents: import('node:fs').Dirent[];
+  try {
+    dirents = await fs.readdir(absDir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of dirents) {
+    if (!e.isFile() || e.name.startsWith('.')) continue;
+    const kind = kindOf(e.name);
+    if (!kind) continue;
+    out.push({ relPath: toPosix(path.relative(root, path.join(absDir, e.name))), kind });
+  }
+  return out;
+}
+
+/** Given a `.../JPG` dir, find its sibling `.../RAW` (or vice versa). */
+async function siblingBucketDir(absDir: string): Promise<string | null> {
+  const leaf = path.basename(absDir).toUpperCase();
+  const want = leaf === 'JPG' ? 'RAW' : leaf === 'RAW' ? 'JPG' : null;
+  if (!want) return null;
+  const parent = path.dirname(absDir);
+  try {
+    const sibs = await fs.readdir(parent, { withFileTypes: true });
+    const match = sibs.find((d) => d.isDirectory() && d.name.toUpperCase() === want);
+    return match ? path.join(parent, match.name) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Find the paired JPG/RAW counterpart of a single share-relative file. */
+async function twinOf(relPosix: string): Promise<string | null> {
+  const root = path.resolve(config.photosPath);
+  const dir = path.dirname(path.resolve(root, relPosix));
+  const entries = await photoEntriesIn(dir, root);
+  const sib = await siblingBucketDir(dir);
+  if (sib) entries.push(...(await photoEntriesIn(sib, root)));
+  return computeTwins(entries).get(relPosix) ?? null;
+}
+
+/** Run exiftool for a curated tag set and return the parsed JSON object. */
+function exiftoolJson(file: string): Promise<Record<string, unknown>> {
+  const tags = [
+    '-Make', '-Model', '-LensModel', '-LensID', '-FocalLength', '-FocalLengthIn35mmFormat',
+    '-FNumber', '-ExposureTime', '-ISO', '-ExposureCompensation', '-DateTimeOriginal',
+    '-ImageSize', '-GPSLatitude', '-GPSLongitude',
+  ];
+  return new Promise((resolve) => {
+    execFile(
+      config.exiftoolPath,
+      ['-j', '-c', '%.6f', ...tags, file],
+      { maxBuffer: 8 * 1024 * 1024 },
+      (err, stdout) => {
+        if (err) {
+          resolve({});
+          return;
+        }
+        try {
+          const arr = JSON.parse(stdout.toString());
+          resolve(Array.isArray(arr) && arr[0] ? (arr[0] as Record<string, unknown>) : {});
+        } catch {
+          resolve({});
+        }
+      },
+    );
+  });
+}
+
+const exifStr = (v: unknown): string | undefined => {
+  if (v === undefined || v === null) return undefined;
+  const s = String(v).trim();
+  return s.length ? s : undefined;
+};
+
+/** Parse an exiftool coordinate ("43.123456 N" / "-79.123456") to signed decimal. */
+function parseCoord(v: unknown): number | undefined {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v !== 'string') return undefined;
+  const m = v.match(/(-?[\d.]+)\s*([NSEW])?/i);
+  if (!m) return undefined;
+  let n = parseFloat(m[1]);
+  if (!Number.isFinite(n)) return undefined;
+  const ref = (m[2] ?? '').toUpperCase();
+  if (ref === 'S' || ref === 'W') n = -Math.abs(n);
+  return n;
+}
+
+function buildExif(j: Record<string, unknown>): ExifInfo {
+  const fnum = exifStr(j.FNumber);
+  const shutter = exifStr(j.ExposureTime);
+  const iso = exifStr(j.ISO);
+  const lat = parseCoord(j.GPSLatitude);
+  const lng = parseCoord(j.GPSLongitude);
+  return {
+    make: exifStr(j.Make),
+    model: exifStr(j.Model),
+    lens: exifStr(j.LensModel) ?? exifStr(j.LensID),
+    focalLength: exifStr(j.FocalLength),
+    focalLength35: exifStr(j.FocalLengthIn35mmFormat),
+    aperture: fnum ? `f/${fnum}` : undefined,
+    shutter: shutter ? `${shutter}s` : undefined,
+    iso: iso ? `ISO ${iso}` : undefined,
+    exposureComp: exifStr(j.ExposureCompensation),
+    dateTime: exifStr(j.DateTimeOriginal),
+    dimensions: exifStr(j.ImageSize),
+    gps: lat !== undefined && lng !== undefined ? { lat, lng } : null,
+  };
+}
 
 /** Pull one embedded image tag out of a RAW file via exiftool (binary stdout). */
 function exiftoolExtract(file: string, tag: string): Promise<Buffer> {
@@ -124,6 +288,16 @@ export const galleryService = {
     folders.sort((a, b) => b.modified - a.modified);
     items.sort((a, b) => b.modified - a.modified);
 
+    // Pair each photo with its JPG/RAW twin (this folder + sibling bucket).
+    const entries = items.map((it) => ({ relPath: it.path, kind: it.kind }));
+    const sib = await siblingBucketDir(dir);
+    if (sib) entries.push(...(await photoEntriesIn(sib, root)));
+    const twins = computeTwins(entries);
+    for (const it of items) {
+      const t = twins.get(it.path);
+      if (t) it.twin = t;
+    }
+
     const here = toPosix(path.relative(root, dir)); // '' at the root
     const parent = here === '' ? null : path.posix.dirname(here) === '.' ? '' : path.posix.dirname(here);
 
@@ -138,7 +312,46 @@ export const galleryService = {
     });
     if (!stat.isFile()) throw new AppError('Not a file', 400);
     const relPosix = toPosix(path.relative(path.resolve(config.photosPath), file));
-    return setRating(relPosix, stars);
+    const value = await setRating(relPosix, stars);
+    const twin = await twinOf(relPosix);
+    if (twin) await setRating(twin, stars);
+    return value;
+  },
+
+  /** Rate many photos at once (RAW/JPG twins are kept in sync). */
+  async rateMany(rels: string[], stars: number): Promise<number> {
+    await loadRatings();
+    const root = path.resolve(config.photosPath);
+    const seen = new Set<string>();
+    let count = 0;
+    for (const rel of rels) {
+      const file = safeResolve(rel);
+      const stat = await fs.stat(file).catch(() => null);
+      if (!stat?.isFile()) continue;
+      const relPosix = toPosix(path.relative(root, file));
+      if (!seen.has(relPosix)) {
+        await setRating(relPosix, stars);
+        seen.add(relPosix);
+        count++;
+      }
+      const twin = await twinOf(relPosix);
+      if (twin && !seen.has(twin)) {
+        await setRating(twin, stars);
+        seen.add(twin);
+      }
+    }
+    if (count === 0) throw new AppError('No valid files to rate', 400);
+    return count;
+  },
+
+  /** Camera metadata for one photo (works for JPG and RAW). */
+  async exif(rel: string): Promise<ExifInfo> {
+    const file = safeResolve(rel);
+    const stat = await fs.stat(file).catch(() => {
+      throw new AppError('Not found', 404);
+    });
+    if (!stat.isFile()) throw new AppError('Not a file', 400);
+    return buildExif(await exiftoolJson(file));
   },
 
   /** Validate paths for bulk download; returns {abs,name} with de-duped names. */
@@ -159,12 +372,21 @@ export const galleryService = {
     return out;
   },
 
-  /** Permanently delete files + their cached renditions + rating entries. */
+  /** Permanently delete files (and their JPG/RAW twins) + caches + ratings. */
   async remove(rels: string[]): Promise<number> {
     await loadRatings();
     const root = path.resolve(config.photosPath);
-    let count = 0;
+
+    // Expand the selection to include each photo's twin, de-duplicated.
+    const targets = new Set<string>();
     for (const rel of rels) {
+      targets.add(rel);
+      const twin = await twinOf(rel);
+      if (twin) targets.add(twin);
+    }
+
+    let count = 0;
+    for (const rel of targets) {
       const file = safeResolve(rel);
       const stat = await fs.stat(file).catch(() => null);
       if (!stat || !stat.isFile()) continue;
@@ -177,6 +399,66 @@ export const galleryService = {
     }
     if (count === 0) throw new AppError('No valid files to delete', 400);
     return count;
+  },
+
+  /** Flat, newest-first stream of every photo in the share (twins paired). */
+  async timeline(limit = 1000): Promise<GalleryTimelineResult> {
+    await loadRatings();
+    const root = path.resolve(config.photosPath);
+    const MAX_WALK = 20000;
+    const collected: {
+      relPath: string; name: string; size: number; modified: number; kind: GalleryItemKind;
+    }[] = [];
+
+    const walk = async (absDir: string): Promise<void> => {
+      if (collected.length >= MAX_WALK) return;
+      let dirents: import('node:fs').Dirent[];
+      try {
+        dirents = await fs.readdir(absDir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of dirents) {
+        if (e.name.startsWith('.')) continue;
+        const abs = path.join(absDir, e.name);
+        if (e.isDirectory()) {
+          await walk(abs);
+          continue;
+        }
+        if (!e.isFile()) continue;
+        const kind = kindOf(e.name);
+        if (!kind) continue;
+        let s: import('node:fs').Stats;
+        try {
+          s = await fs.stat(abs);
+        } catch {
+          continue;
+        }
+        collected.push({
+          relPath: toPosix(path.relative(root, abs)),
+          name: e.name,
+          size: s.size,
+          modified: s.mtimeMs,
+          kind,
+        });
+        if (collected.length >= MAX_WALK) return;
+      }
+    };
+    await walk(root);
+
+    const twins = computeTwins(collected.map((c) => ({ relPath: c.relPath, kind: c.kind })));
+    collected.sort((a, b) => b.modified - a.modified);
+    const truncated = collected.length > limit;
+    const items: GalleryItem[] = collected.slice(0, limit).map((c) => ({
+      path: c.relPath,
+      name: c.name,
+      size: c.size,
+      modified: c.modified,
+      kind: c.kind,
+      rating: getRating(c.relPath),
+      twin: twins.get(c.relPath),
+    }));
+    return { items, truncated };
   },
 
   async render(rel: string, variant: Variant): Promise<{ data: Buffer; type: string }> {

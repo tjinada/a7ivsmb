@@ -31,6 +31,16 @@ export const galleryController = {
     }
   },
 
+  async timeline(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const raw = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : NaN;
+      const limit = Number.isFinite(raw) ? Math.min(2000, Math.max(1, raw)) : 1000;
+      sendSuccess(res, await galleryService.timeline(limit));
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async rate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = (req.body ?? {}) as { path?: unknown; stars?: unknown };
@@ -40,6 +50,30 @@ export const galleryController = {
       }
       const rating = await galleryService.rate(body.path, body.stars);
       sendSuccess(res, { path: body.path, rating });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async rateBulk(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = (req.body ?? {}) as { paths?: unknown; stars?: unknown };
+      if (!Array.isArray(body.paths) || body.paths.some((p) => typeof p !== 'string')) {
+        throw new AppError('paths must be an array of strings', 400);
+      }
+      if (typeof body.stars !== 'number' || !Number.isFinite(body.stars)) {
+        throw new AppError('stars must be a number 0-5', 400);
+      }
+      const count = await galleryService.rateMany(body.paths as string[], body.stars);
+      sendSuccess(res, { count, stars: Math.min(5, Math.max(0, Math.round(body.stars))) });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async exif(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      sendSuccess(res, await galleryService.exif(reqPath(req)));
     } catch (err) {
       next(err);
     }
