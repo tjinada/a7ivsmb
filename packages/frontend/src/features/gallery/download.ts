@@ -4,8 +4,10 @@ import type { GalleryItem } from '@sonycam/shared';
 const originalUrl = (p: GalleryItem) => `/gallery/original?path=${encodeURIComponent(p.path)}`;
 
 /**
- * Save the original file to the phone. Prefers the Web Share API (lets the
- * user save into Photos / share onward); falls back to a plain download.
+ * Save/share one original. On platforms with the Web Share API this opens the
+ * native share sheet (which itself offers "Save Image" / WhatsApp / etc.) and
+ * does nothing else — so sharing never *also* saves a duplicate to the phone.
+ * Only where file-sharing is unavailable (e.g. desktop) does it download.
  */
 export async function saveImage(photo: GalleryItem): Promise<void> {
   const res = await api.get(originalUrl(photo), { responseType: 'blob' });
@@ -18,13 +20,15 @@ export async function saveImage(photo: GalleryItem): Promise<void> {
   };
   if (shareNav.canShare?.({ files: [file] }) && shareNav.share) {
     try {
-      await shareNav.share({ files: [file], title: photo.name });
-      return;
+      await shareNav.share({ files: [file] });
     } catch {
-      // user cancelled or share failed → fall through to download
+      // Cancelled, or the OS reported an error (iOS does this even after a
+      // successful share). Either way, do NOT fall back to a download.
     }
+    return;
   }
 
+  // Reached only where the platform can't share files: save directly.
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
