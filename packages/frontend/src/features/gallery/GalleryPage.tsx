@@ -2,16 +2,18 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Folder, ChevronRight, RefreshCw, Loader2, Images, Download, Home, Star, SlidersHorizontal,
-  CheckSquare, CheckCircle2, Circle, Share2, Trash2, MoreVertical, CalendarDays,
+  CheckSquare, CheckCircle2, Circle, Share2, Trash2, MoreVertical, CalendarDays, FolderPlus, Library,
 } from 'lucide-react';
 import type {
   ApiResponse, GalleryBrowseResult, GalleryTimelineResult, GalleryItem,
+  AlbumInfo, AlbumFormats, AlbumCreateResult,
 } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from './AuthImage';
 import { Lightbox } from './Lightbox';
 import { ConfirmDialog } from './ConfirmDialog';
 import { CleanupDialog } from './CleanupDialog';
+import { AlbumDialog } from './AlbumDialog';
 import { StarRating } from './StarRating';
 import { shareItems, downloadZip } from './download';
 
@@ -25,6 +27,11 @@ async function fetchTimeline(): Promise<GalleryTimelineResult> {
   const res = await api.get<ApiResponse<GalleryTimelineResult>>('/gallery/timeline');
   if (!res.data.data) throw new Error('Unexpected response');
   return res.data.data;
+}
+
+async function fetchAlbums(): Promise<AlbumInfo[]> {
+  const res = await api.get<ApiResponse<AlbumInfo[]>>('/gallery/albums');
+  return res.data.data ?? [];
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
@@ -70,6 +77,7 @@ export function GalleryPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [ratePickerOpen, setRatePickerOpen] = useState(false);
+  const [albumOpen, setAlbumOpen] = useState<null | 'selection' | 'starred'>(null);
 
   const qc = useQueryClient();
   const isTimeline = view === 'timeline';
@@ -84,6 +92,11 @@ export function GalleryPage() {
     queryFn: fetchTimeline,
     enabled: isTimeline,
   });
+  const albumsQuery = useQuery({
+    queryKey: ['gallery', 'albums'],
+    queryFn: fetchAlbums,
+    enabled: albumOpen !== null,
+  });
 
   const activeQuery = isTimeline ? timelineQuery : browseQuery;
   const { isLoading, isError, isFetching } = activeQuery;
@@ -93,6 +106,10 @@ export function GalleryPage() {
   const folders = !isTimeline ? browseQuery.data?.folders ?? [] : [];
   const allItems = isTimeline ? timelineQuery.data?.items ?? [] : browseQuery.data?.items ?? [];
   const truncated = isTimeline ? timelineQuery.data?.truncated ?? false : false;
+
+  // Pin the curated Albums/ folder to the top, on its own row.
+  const albumsFolder = folders.find((f) => f.path === 'Albums');
+  const otherFolders = albumsFolder ? folders.filter((f) => f.path !== 'Albums') : folders;
 
   // Patch the items array of whichever query is currently showing.
   const patchActive = (fn: (items: GalleryItem[]) => GalleryItem[]) => {
@@ -110,6 +127,7 @@ export function GalleryPage() {
     setMenuOpen(false);
     setCleanupOpen(false);
     setRatePickerOpen(false);
+    setAlbumOpen(null);
   }, [path]);
 
   // Switching view drops the current selection/menus (different item set).
@@ -119,6 +137,7 @@ export function GalleryPage() {
     setMenuOpen(false);
     setCleanupOpen(false);
     setRatePickerOpen(false);
+    setAlbumOpen(null);
   }, [view]);
 
   const rateMut = useMutation({
@@ -142,6 +161,28 @@ export function GalleryPage() {
   const deleteMut = useMutation({
     mutationFn: (paths: string[]) => api.post('/gallery/delete', { paths }),
   });
+
+  const createAlbumMut = useMutation({
+    mutationFn: (body: { name: string; paths: string[]; formats: AlbumFormats }) =>
+      api.post<ApiResponse<AlbumCreateResult>>('/gallery/albums', body),
+    onSuccess: (res) => {
+      const result = res.data.data;
+      qc.invalidateQueries({ queryKey: ['gallery'] });
+      setAlbumOpen(null);
+      exitSelect();
+      if (result) {
+        // Jump straight into the new album so the user sees it.
+        setView('folders');
+        setPath(result.path);
+      }
+    },
+    onError: () => window.alert('Could not create the album'),
+  });
+
+  const createAlbum = (opts: { name: string; paths: string[]; formats: AlbumFormats }) => {
+    if (opts.paths.length === 0) return;
+    createAlbumMut.mutate(opts);
+  };
 
   const rate = (item: GalleryItem, stars: number) => {
     patchActive((items) =>
@@ -414,7 +455,18 @@ export function GalleryPage() {
               {menuOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                  <div className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl">
+                  <div className="absolute right-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setAlbumOpen('starred');
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-gray-200 transition hover:bg-surface hover:brightness-125"
+                    >
+                      <FolderPlus className="h-4 w-4 text-primary-500" />
+                      New album from starred&hellip;
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -479,26 +531,46 @@ export function GalleryPage() {
           <div className="p-3">
             {!isTimeline && folders.length > 0 && (
               <section className="mb-5">
-                <SectionLabel>Folders</SectionLabel>
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-                  {folders.map((f) => (
-                    <button
-                      key={f.path}
-                      type="button"
-                      onClick={() => setPath(f.path)}
-                      className="group flex items-start gap-3 rounded-xl border border-border bg-surface p-3 text-left transition hover:border-primary-500/50 active:scale-[0.98]"
-                    >
-                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary-500/10 text-primary-500">
-                        <Folder className="h-5 w-5" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block break-words text-sm font-medium leading-snug text-gray-100">{f.name}</span>
-                        <span className="mt-0.5 block text-[11px] text-gray-500">Folder</span>
-                      </span>
-                      <ChevronRight className="mt-3 h-4 w-4 flex-shrink-0 text-gray-600 transition group-hover:translate-x-0.5 group-hover:text-gray-400" />
-                    </button>
-                  ))}
-                </div>
+                {albumsFolder && (
+                  <button
+                    type="button"
+                    onClick={() => setPath(albumsFolder.path)}
+                    className="group mb-3 flex w-full items-center gap-3 rounded-xl border border-primary-500/30 bg-primary-500/[0.07] p-3 text-left transition hover:border-primary-500/60 active:scale-[0.99]"
+                  >
+                    <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary-500/15 text-primary-400">
+                      <Library className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-gray-100">Albums</span>
+                      <span className="block text-[11px] text-gray-500">Curated collections</span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-500 transition group-hover:translate-x-0.5 group-hover:text-gray-300" />
+                  </button>
+                )}
+                {otherFolders.length > 0 && (
+                  <>
+                    <SectionLabel>Folders</SectionLabel>
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+                      {otherFolders.map((f) => (
+                        <button
+                          key={f.path}
+                          type="button"
+                          onClick={() => setPath(f.path)}
+                          className="group flex items-start gap-3 rounded-xl border border-border bg-surface p-3 text-left transition hover:border-primary-500/50 active:scale-[0.98]"
+                        >
+                          <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary-500/10 text-primary-500">
+                            <Folder className="h-5 w-5" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block break-words text-sm font-medium leading-snug text-gray-100">{f.name}</span>
+                            <span className="mt-0.5 block text-[11px] text-gray-500">Folder</span>
+                          </span>
+                          <ChevronRight className="mt-3 h-4 w-4 flex-shrink-0 text-gray-600 transition group-hover:translate-x-0.5 group-hover:text-gray-400" />
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </section>
             )}
 
@@ -562,12 +634,21 @@ export function GalleryPage() {
               {allShownSelected ? 'Clear all' : 'Select all'}
             </button>
           </div>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => setAlbumOpen('selection')}
+              disabled={selected.size === 0}
+              className="flex w-[52px] flex-col items-center gap-0.5 rounded-lg py-1.5 text-gray-200 transition hover:bg-surface disabled:opacity-40"
+            >
+              <FolderPlus className="h-5 w-5" />
+              <span className="text-[10px]">Album</span>
+            </button>
             <button
               type="button"
               onClick={() => setRatePickerOpen((o) => !o)}
               disabled={selected.size === 0}
-              className="flex w-14 flex-col items-center gap-0.5 rounded-lg py-1.5 text-gray-200 transition hover:bg-surface disabled:opacity-40"
+              className="flex w-[52px] flex-col items-center gap-0.5 rounded-lg py-1.5 text-gray-200 transition hover:bg-surface disabled:opacity-40"
             >
               <Star className="h-5 w-5" />
               <span className="text-[10px]">Rate</span>
@@ -576,7 +657,7 @@ export function GalleryPage() {
               type="button"
               onClick={bulkShare}
               disabled={selected.size === 0 || busy !== null}
-              className="flex w-14 flex-col items-center gap-0.5 rounded-lg py-1.5 text-gray-200 transition hover:bg-surface disabled:opacity-40"
+              className="flex w-[52px] flex-col items-center gap-0.5 rounded-lg py-1.5 text-gray-200 transition hover:bg-surface disabled:opacity-40"
             >
               {busy === 'share' ? <Loader2 className="h-5 w-5 animate-spin" /> : <Share2 className="h-5 w-5" />}
               <span className="text-[10px]">Share</span>
@@ -585,7 +666,7 @@ export function GalleryPage() {
               type="button"
               onClick={bulkDownload}
               disabled={selected.size === 0 || busy !== null}
-              className="flex w-14 flex-col items-center gap-0.5 rounded-lg py-1.5 text-gray-200 transition hover:bg-surface disabled:opacity-40"
+              className="flex w-[52px] flex-col items-center gap-0.5 rounded-lg py-1.5 text-gray-200 transition hover:bg-surface disabled:opacity-40"
             >
               {busy === 'zip' ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
               <span className="text-[10px]">Download</span>
@@ -594,7 +675,7 @@ export function GalleryPage() {
               type="button"
               onClick={() => setPendingDelete(selectedItems)}
               disabled={selected.size === 0}
-              className="flex w-14 flex-col items-center gap-0.5 rounded-lg py-1.5 text-red-400 transition hover:bg-red-500/10 disabled:opacity-40"
+              className="flex w-[52px] flex-col items-center gap-0.5 rounded-lg py-1.5 text-red-400 transition hover:bg-red-500/10 disabled:opacity-40"
             >
               <Trash2 className="h-5 w-5" />
               <span className="text-[10px]">Delete</span>
@@ -666,6 +747,17 @@ export function GalleryPage() {
           busy={deleteMut.isPending}
           onConfirm={runCleanup}
           onCancel={() => setCleanupOpen(false)}
+        />
+      )}
+
+      {albumOpen && (
+        <AlbumDialog
+          starred={albumOpen === 'starred'}
+          sourceItems={albumOpen === 'starred' ? allItems : selectedItems}
+          existingAlbums={albumsQuery.data ?? []}
+          busy={createAlbumMut.isPending}
+          onConfirm={createAlbum}
+          onCancel={() => setAlbumOpen(null)}
         />
       )}
     </div>

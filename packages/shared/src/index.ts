@@ -110,6 +110,23 @@ export interface GalleryTimelineResult {
   truncated: boolean;       // true if more photos exist than the returned cap
 }
 
+/** Which formats to copy into an album's Selected folder. */
+export type AlbumFormats = 'both' | 'jpg' | 'raw';
+
+/** A curated album folder under the share's Albums/ root. */
+export interface AlbumInfo {
+  name: string;
+  path: string;             // share-relative POSIX path, e.g. "Albums/June Wedding"
+}
+
+/** Result of POST /api/gallery/albums (create or add-to). */
+export interface AlbumCreateResult {
+  name: string;
+  path: string;             // album root, share-relative
+  shots: number;            // distinct photos copied
+  copied: number;           // files copied (JPG + RAW)
+}
+
 /** One directory's contents, as returned by GET /api/gallery/browse. */
 export interface GalleryBrowseResult {
   path: string;            // current dir, POSIX relative ('' = share root)

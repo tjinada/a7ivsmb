@@ -13,6 +13,9 @@ import type {
   GalleryItemKind,
   ExifInfo,
   GalleryTimelineResult,
+  AlbumInfo,
+  AlbumCreateResult,
+  AlbumFormats,
 } from '@sonycam/shared';
 import { loadRatings, getRating, setRating, removeRating } from './ratings.store.js';
 
@@ -247,6 +250,40 @@ function cacheFilesFor(file: string, stat: { mtimeMs: number; size: number }): s
   });
 }
 
+/** Share-relative root that holds curated albums (excluded from the timeline). */
+const ALBUMS_ROOT = 'Albums';
+
+/** Validate a user-supplied album name; keep it a single safe path segment. */
+function sanitizeAlbumName(raw: string): string {
+  const name = (raw ?? '').trim();
+  if (!name) throw new AppError('Album name is required', 400);
+  if (name.length > 80) throw new AppError('Album name is too long', 400);
+  if (/[\\/:*?"<>|]/.test(name) || name.includes('..') || name.startsWith('.')) {
+    throw new AppError('Album name has invalid characters', 400);
+  }
+  return name;
+}
+
+/** Find a basename free in both the JPG and RAW buckets (keeps a pair aligned). */
+async function uniqueBase(
+  base: string,
+  jpgDir: string,
+  jpgExt: string,
+  rawDir: string,
+  rawExt: string,
+): Promise<string> {
+  const exists = async (p: string) => !!(await fs.stat(p).catch(() => null));
+  const taken = async (b: string) =>
+    (!!jpgExt && (await exists(path.join(jpgDir, b + jpgExt)))) ||
+    (!!rawExt && (await exists(path.join(rawDir, b + rawExt))));
+  if (!(await taken(base))) return base;
+  for (let i = 2; i < 1000; i += 1) {
+    const cand = `${base}-${i}`;
+    if (!(await taken(cand))) return cand;
+  }
+  return `${base}-${Date.now()}`;
+}
+
 export const galleryService = {
   /** List one directory (non-recursive): subfolders + image/raw items. */
   async browse(rel: string): Promise<GalleryBrowseResult> {
@@ -354,6 +391,99 @@ export const galleryService = {
     return buildExif(await exiftoolJson(file));
   },
 
+  /** Existing albums (subfolders under the share's Albums/ root). */
+  async listAlbums(): Promise<AlbumInfo[]> {
+    const albumsDir = path.join(path.resolve(config.photosPath), ALBUMS_ROOT);
+    let dirents: import('node:fs').Dirent[];
+    try {
+      dirents = await fs.readdir(albumsDir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    return dirents
+      .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+      .map((d) => ({ name: d.name, path: `${ALBUMS_ROOT}/${d.name}` }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+
+  /**
+   * Create (or add into) an album by COPYING the chosen photos into
+   * `Albums/<name>/Selected/{JPG,RAW}` and creating an empty `Edited/`.
+   * Originals are never touched; star ratings are copied onto the new files.
+   * JPG/RAW twins are kept together and given matching basenames.
+   */
+  async createAlbum(name: string, rels: string[], formats: AlbumFormats): Promise<AlbumCreateResult> {
+    await loadRatings();
+    const root = path.resolve(config.photosPath);
+    const albumName = sanitizeAlbumName(name);
+    const albumRel = `${ALBUMS_ROOT}/${albumName}`;
+    const albumAbs = safeResolve(albumRel);
+
+    const selJpgAbs = path.join(albumAbs, 'Selected', 'JPG');
+    const selRawAbs = path.join(albumAbs, 'Selected', 'RAW');
+    await fs.mkdir(selJpgAbs, { recursive: true });
+    await fs.mkdir(selRawAbs, { recursive: true });
+    await fs.mkdir(path.join(albumAbs, 'Edited'), { recursive: true });
+
+    const relOf = (abs: string) => toPosix(path.relative(root, abs));
+    const consumed = new Set<string>();
+    let shots = 0;
+    let copied = 0;
+
+    for (const rel of rels) {
+      let srcAbs: string;
+      try {
+        srcAbs = safeResolve(rel);
+      } catch {
+        continue;
+      }
+      if (consumed.has(srcAbs)) continue;
+      const srcStat = await fs.stat(srcAbs).catch(() => null);
+      if (!srcStat?.isFile()) continue;
+      const kind = kindOf(path.basename(srcAbs));
+      if (!kind) continue;
+
+      // Resolve the JPG/RAW pair for this shot.
+      const twinRel = await twinOf(relOf(srcAbs));
+      const twinAbs = twinRel ? safeResolve(twinRel) : null;
+      let jpgAbs =
+        kind === 'image' ? srcAbs : twinAbs && kindOf(path.basename(twinAbs)) === 'image' ? twinAbs : null;
+      let rawAbs =
+        kind === 'raw' ? srcAbs : twinAbs && kindOf(path.basename(twinAbs)) === 'raw' ? twinAbs : null;
+
+      consumed.add(srcAbs);
+      if (twinAbs) consumed.add(twinAbs);
+
+      if (formats === 'jpg') rawAbs = null;
+      if (formats === 'raw') jpgAbs = null;
+      if (!jpgAbs && !rawAbs) continue;
+
+      const baseSrc = jpgAbs ?? rawAbs!;
+      const jpgExt = jpgAbs ? path.extname(jpgAbs) : '';
+      const rawExt = rawAbs ? path.extname(rawAbs) : '';
+      const base = await uniqueBase(path.parse(baseSrc).name, selJpgAbs, jpgExt, selRawAbs, rawExt);
+
+      if (jpgAbs) {
+        const dest = path.join(selJpgAbs, base + jpgExt);
+        await fs.copyFile(jpgAbs, dest);
+        const r = getRating(relOf(jpgAbs));
+        if (r > 0) await setRating(relOf(dest), r);
+        copied += 1;
+      }
+      if (rawAbs) {
+        const dest = path.join(selRawAbs, base + rawExt);
+        await fs.copyFile(rawAbs, dest);
+        const r = getRating(relOf(rawAbs));
+        if (r > 0) await setRating(relOf(dest), r);
+        copied += 1;
+      }
+      shots += 1;
+    }
+
+    if (shots === 0) throw new AppError('No valid photos to add to the album', 400);
+    return { name: albumName, path: albumRel, shots, copied };
+  },
+
   /** Validate paths for bulk download; returns {abs,name} with de-duped names. */
   async resolveForZip(rels: string[]): Promise<{ abs: string; name: string }[]> {
     const out: { abs: string; name: string }[] = [];
@@ -405,6 +535,7 @@ export const galleryService = {
   async timeline(limit = 1000): Promise<GalleryTimelineResult> {
     await loadRatings();
     const root = path.resolve(config.photosPath);
+    const albumsRoot = path.join(root, ALBUMS_ROOT);
     const MAX_WALK = 20000;
     const collected: {
       relPath: string; name: string; size: number; modified: number; kind: GalleryItemKind;
@@ -422,6 +553,7 @@ export const galleryService = {
         if (e.name.startsWith('.')) continue;
         const abs = path.join(absDir, e.name);
         if (e.isDirectory()) {
+          if (abs === albumsRoot) continue; // album copies aren't part of the archive
           await walk(abs);
           continue;
         }

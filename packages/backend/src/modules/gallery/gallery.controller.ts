@@ -79,6 +79,28 @@ export const galleryController = {
     }
   },
 
+  async albums(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      sendSuccess(res, await galleryService.listAlbums());
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async createAlbum(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = (req.body ?? {}) as { name?: unknown; paths?: unknown; formats?: unknown };
+      if (typeof body.name !== 'string') throw new AppError('name is required', 400);
+      if (!Array.isArray(body.paths) || body.paths.some((p) => typeof p !== 'string')) {
+        throw new AppError('paths must be an array of strings', 400);
+      }
+      const formats = body.formats === 'jpg' || body.formats === 'raw' ? body.formats : 'both';
+      sendSuccess(res, await galleryService.createAlbum(body.name, body.paths as string[], formats));
+    } catch (err) {
+      next(err);
+    }
+  },
+
   thumb(req: Request, res: Response, next: NextFunction): Promise<void> {
     return serveRendition(req, res, next, 'thumb');
   },

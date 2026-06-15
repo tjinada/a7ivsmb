@@ -6,6 +6,8 @@ const router: Router = Router();
 
 router.get('/browse', requireAuth, galleryController.browse);
 router.get('/timeline', requireAuth, galleryController.timeline);
+router.get('/albums', requireAuth, galleryController.albums);
+router.post('/albums', requireAuth, galleryController.createAlbum);
 router.put('/rating', requireAuth, galleryController.rate);
 router.post('/rate-bulk', requireAuth, galleryController.rateBulk);
 router.get('/exif', requireAuth, galleryController.exif);
