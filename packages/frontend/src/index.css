@@ -11,6 +11,22 @@ body,
 body {
   @apply bg-base text-gray-100 antialiased;
   margin: 0;
-  /* respect device notches in standalone PWA mode */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+@layer utilities {
+  /* iOS safe-area insets (notch / Dynamic Island / home indicator).
+     Applied per chrome element — header, tab bar, fullscreen overlays —
+     because body padding alone can't inset fixed-position elements. */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pl-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  .pr-safe {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
 }

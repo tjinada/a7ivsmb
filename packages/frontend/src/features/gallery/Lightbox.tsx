@@ -49,7 +49,13 @@ export function Lightbox({
   };
 
   return (
-    <div className="fixed inset-0 z-[10000] flex flex-col bg-black/95">
+    <div
+      className="fixed inset-0 z-[10000] flex flex-col bg-black/95"
+      style={{
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
       <div className="flex items-center justify-between gap-2 px-4 py-3 text-white">
         <span className="min-w-0 flex-1 truncate text-sm">{photo.name}</span>
         <button

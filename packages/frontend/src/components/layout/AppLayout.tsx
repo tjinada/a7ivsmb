@@ -8,7 +8,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-2">
+      <header
+        className="flex flex-shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-2"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
+      >
         <span className="font-semibold">Sony Transfer</span>
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-400">{user?.username}</span>

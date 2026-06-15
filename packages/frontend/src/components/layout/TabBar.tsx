@@ -9,13 +9,16 @@ const tabs: { to: string; label: string; Icon: LucideIcon }[] = [
 
 export function TabBar() {
   return (
-    <nav className="flex flex-shrink-0 border-t border-border bg-surface">
+    <nav
+      className="flex flex-shrink-0 border-t border-border bg-surface"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
       {tabs.map(({ to, label, Icon }) => (
         <NavLink
           key={to}
           to={to}
           className={({ isActive }) =>
-            `flex flex-1 flex-col items-center gap-0.5 py-2 text-xs ${
+            `flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs touch-manipulation select-none ${
               isActive ? 'text-primary-500' : 'text-gray-400 hover:text-gray-200'
             }`
           }
