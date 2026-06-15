@@ -2,13 +2,14 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Folder, ChevronRight, RefreshCw, Loader2, Images, Download, Home, Star, SlidersHorizontal,
-  CheckSquare, CheckCircle2, Circle, Share2, Trash2,
+  CheckSquare, CheckCircle2, Circle, Share2, Trash2, MoreVertical,
 } from 'lucide-react';
 import type { ApiResponse, GalleryBrowseResult, GalleryItem } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from './AuthImage';
 import { Lightbox } from './Lightbox';
 import { ConfirmDialog } from './ConfirmDialog';
+import { CleanupDialog } from './CleanupDialog';
 import { shareItems, downloadZip } from './download';
 
 async function browse(path: string): Promise<GalleryBrowseResult> {
@@ -23,19 +24,14 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-const RATING_OPTS = [
-  { label: 'All', value: 0 },
-  { label: '★3+', value: 3 },
-  { label: '★4+', value: 4 },
-  { label: '★5', value: 5 },
-];
+const RATING_OPTS = [0, 3, 4, 5];
 const TYPE_OPTS = [
   { label: 'All', value: 'all' as const },
   { label: 'JPG', value: 'image' as const },
   { label: 'RAW', value: 'raw' as const },
 ];
-const activeChip = 'rounded-md bg-primary-500 px-2.5 py-1 text-xs font-medium text-white';
-const idleChip = 'rounded-md px-2.5 py-1 text-xs text-gray-400';
+const activeChip = 'flex items-center rounded-md bg-primary-500 px-2.5 py-1 text-xs font-medium text-white';
+const idleChip = 'flex items-center rounded-md px-2.5 py-1 text-xs text-gray-400 hover:text-gray-200';
 
 export function GalleryPage() {
   const [path, setPath] = useState('');
@@ -46,6 +42,8 @@ export function GalleryPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<GalleryItem[]>([]);
   const [busy, setBusy] = useState<null | 'share' | 'zip'>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [cleanupOpen, setCleanupOpen] = useState(false);
 
   const qc = useQueryClient();
 
@@ -54,12 +52,14 @@ export function GalleryPage() {
     queryFn: () => browse(path),
   });
 
-  // Reset filters + selection when changing folders.
+  // Reset filters + selection + menus when changing folders.
   useEffect(() => {
     setRatingMin(0);
     setTypeFilter('all');
     setSelecting(false);
     setSelected(new Set());
+    setMenuOpen(false);
+    setCleanupOpen(false);
   }, [path]);
 
   const rateMut = useMutation({
@@ -96,8 +96,9 @@ export function GalleryPage() {
     setSelected(new Set());
   };
 
-  const performDelete = async () => {
-    const paths = pendingDelete.map((i) => i.path);
+  const deleteItems = async (items: GalleryItem[]) => {
+    const paths = items.map((i) => i.path);
+    if (paths.length === 0) return;
     try {
       await deleteMut.mutateAsync(paths);
       setActive((a) => (a && paths.includes(a.path) ? null : a));
@@ -105,9 +106,17 @@ export function GalleryPage() {
       qc.invalidateQueries({ queryKey: ['gallery', 'browse', path] });
     } catch {
       window.alert('Delete failed');
-    } finally {
-      setPendingDelete([]);
     }
+  };
+
+  const performDelete = async () => {
+    await deleteItems(pendingDelete);
+    setPendingDelete([]);
+  };
+
+  const runCleanup = async (targets: GalleryItem[]) => {
+    await deleteItems(targets);
+    setCleanupOpen(false);
   };
 
   const crumbs = [
@@ -185,7 +194,7 @@ export function GalleryPage() {
             </span>
           );
         })}
-        <div className="ml-auto flex flex-shrink-0 items-center gap-1">
+        <div className="relative ml-auto flex flex-shrink-0 items-center gap-1">
           {selecting ? (
             <button type="button" onClick={exitSelect} className="rounded-md px-2 py-1 text-xs font-medium text-primary-500">
               Cancel
@@ -210,6 +219,34 @@ export function GalleryPage() {
               >
                 <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
               </button>
+              {allItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((o) => !o)}
+                  aria-label="More actions"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-surface hover:text-gray-200"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+              )}
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                  <div className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setCleanupOpen(true);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-red-400 transition hover:bg-red-500/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete low-rated&hellip;
+                    </button>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -220,9 +257,17 @@ export function GalleryPage() {
         <div className="flex flex-shrink-0 items-center gap-2 overflow-x-auto border-b border-border bg-base px-3 py-2">
           <SlidersHorizontal className="h-3.5 w-3.5 flex-shrink-0 text-gray-500" />
           <div className="flex flex-shrink-0 rounded-lg bg-surface p-0.5">
-            {RATING_OPTS.map((o) => (
-              <button key={o.value} type="button" onClick={() => setRatingMin(o.value)} className={ratingMin === o.value ? activeChip : idleChip}>
-                {o.label}
+            {RATING_OPTS.map((v) => (
+              <button key={v} type="button" onClick={() => setRatingMin(v)} className={ratingMin === v ? activeChip : idleChip}>
+                {v === 0 ? (
+                  'All'
+                ) : (
+                  <span className="flex items-center gap-0.5">
+                    <Star className="h-3 w-3 fill-current" />
+                    {v}
+                    {v < 5 ? '+' : ''}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -413,6 +458,15 @@ export function GalleryPage() {
           busy={deleteMut.isPending}
           onConfirm={performDelete}
           onCancel={() => setPendingDelete([])}
+        />
+      )}
+
+      {cleanupOpen && (
+        <CleanupDialog
+          items={allItems}
+          busy={deleteMut.isPending}
+          onConfirm={runCleanup}
+          onCancel={() => setCleanupOpen(false)}
         />
       )}
     </div>
