@@ -11,7 +11,7 @@ export function TabBar() {
   return (
     <nav
       className="flex flex-shrink-0 border-t border-border bg-surface"
-      style={{ paddingBottom: 'max(env(safe-area-inset-bottom) - 1.25rem, 0.25rem)' }}
+      style={{ paddingBottom: '0.25rem' }}
     >
       {tabs.map(({ to, label, Icon }) => (
         <NavLink
