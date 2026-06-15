@@ -1,6 +1,7 @@
 import { promises as fs, createReadStream } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import type { Readable } from 'node:stream';
 import sharp from 'sharp';
 import { config } from '../../config/index.js';
@@ -8,8 +9,8 @@ import { AppError } from '../../middleware/index.js';
 import type { GalleryBrowseResult, FolderEntry, GalleryItem } from '@sonycam/shared';
 import { loadRatings, getRating, setRating, removeRating } from './ratings.store.js';
 
-// Browser-renderable raster formats → thumbnailable. RAW formats are listed
-// as download-only tiles. Anything else (video, sidecars, etc.) is hidden.
+// Browser-renderable raster formats. RAW formats are previewed via their
+// embedded JPEG (see render/extractRawPreview). Anything else is hidden.
 const DISPLAYABLE = new Set([
   '.jpg', '.jpeg', '.png', '.webp', '.gif', '.tif', '.tiff', '.avif', '.heic', '.heif',
 ]);
@@ -30,6 +31,35 @@ const MIME: Record<string, string> = {
 };
 
 const toPosix = (p: string) => p.split(path.sep).join('/');
+
+/** Pull one embedded image tag out of a RAW file via exiftool (binary stdout). */
+function exiftoolExtract(file: string, tag: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      config.exiftoolPath,
+      ['-b', `-${tag}`, file],
+      { encoding: 'buffer', maxBuffer: 128 * 1024 * 1024 },
+      (err, stdout) => (err ? reject(err) : resolve(stdout as Buffer)),
+    );
+  });
+}
+
+/**
+ * Extract the embedded JPEG preview from a RAW file. Cameras embed a full-size
+ * JPEG (PreviewImage); we prefer that and fall back to smaller variants. Throws
+ * 415 if nothing usable is found (so the item stays download-only).
+ */
+async function extractRawPreview(file: string): Promise<Buffer> {
+  for (const tag of ['PreviewImage', 'JpgFromRaw', 'ThumbnailImage']) {
+    try {
+      const buf = await exiftoolExtract(file, tag);
+      if (buf.length > 0) return buf;
+    } catch {
+      /* exiftool missing or tag absent → try the next one */
+    }
+  }
+  throw new AppError('No embedded preview in this RAW file', 415);
+}
 
 /** Resolve a share-relative path (file or dir) and keep it inside the share. */
 function safeResolve(rel: string): string {
@@ -168,9 +198,14 @@ export const galleryService = {
       /* cache miss → generate */
     }
 
+    // RAW files can't be decoded by sharp directly; use the camera's embedded
+    // JPEG preview instead. (Throws 415 here if there's no usable preview.)
+    const ext = path.extname(file).toLowerCase();
+    const input: string | Buffer = RAW.has(ext) ? await extractRawPreview(file) : file;
+
     let out: Buffer;
     try {
-      out = await sharp(file, { failOn: 'none' })
+      out = await sharp(input, { failOn: 'none' })
         .rotate() // honor EXIF orientation
         .resize({ width, height: width, fit: 'inside', withoutEnlargement: true })
         .webp({ quality })

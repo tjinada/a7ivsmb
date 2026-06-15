@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ImageOff } from 'lucide-react';
 import { api } from '@/api/client';
 
@@ -13,11 +13,13 @@ export function AuthImage({
   alt,
   className,
   eager = false,
+  fallback,
 }: {
   src: string;
   alt: string;
   className?: string;
   eager?: boolean;
+  fallback?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(eager);
@@ -63,9 +65,11 @@ export function AuthImage({
       {url ? (
         <img src={url} alt={alt} className="h-full w-full object-cover" />
       ) : error ? (
-        <div className="flex h-full w-full items-center justify-center bg-surface text-gray-600">
-          <ImageOff className="h-5 w-5" />
-        </div>
+        fallback ?? (
+          <div className="flex h-full w-full items-center justify-center bg-surface text-gray-600">
+            <ImageOff className="h-5 w-5" />
+          </div>
+        )
       ) : (
         <div className="h-full w-full animate-pulse bg-surface" />
       )}

@@ -34,6 +34,11 @@ export const config = {
   // Disk cache for generated thumbnails/previews (Phase 3).
   cacheDir: path.resolve(process.env.THUMB_CACHE_PATH ?? `${process.env.DATA_DIR ?? './data'}/thumbnails`),
 
+  // RAW preview: path to the exiftool binary used to pull the embedded JPEG
+  // preview out of .ARW/.NEF/etc. Defaults to whatever's on PATH (the Docker
+  // image installs it); override for local dev if needed.
+  exiftoolPath: process.env.EXIFTOOL_PATH ?? 'exiftool',
+
   // Embedded FTP receive server (Phase 2). These seed data/ftp.json on first
   // run; the JSON store is the source of truth thereafter. Safe-by-default:
   // disabled unless explicitly enabled, and never starts without a password.

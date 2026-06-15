@@ -9,7 +9,7 @@ import { api } from '@/api/client';
 import { AuthImage } from './AuthImage';
 import { Lightbox } from './Lightbox';
 import { ConfirmDialog } from './ConfirmDialog';
-import { saveImage, shareItems, downloadZip } from './download';
+import { shareItems, downloadZip } from './download';
 
 async function browse(path: string): Promise<GalleryBrowseResult> {
   const res = await api.get<ApiResponse<GalleryBrowseResult>>('/gallery/browse', { params: { path } });
@@ -40,7 +40,6 @@ const idleChip = 'rounded-md px-2.5 py-1 text-xs text-gray-400';
 export function GalleryPage() {
   const [path, setPath] = useState('');
   const [active, setActive] = useState<GalleryItem | null>(null);
-  const [savingPath, setSavingPath] = useState<string | null>(null);
   const [ratingMin, setRatingMin] = useState(0);
   const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'raw'>('all');
   const [selecting, setSelecting] = useState(false);
@@ -116,24 +115,14 @@ export function GalleryPage() {
     ...(path ? path.split('/').map((seg, i, arr) => ({ name: seg, path: arr.slice(0, i + 1).join('/') })) : []),
   ];
 
-  const downloadRaw = async (item: GalleryItem) => {
-    setSavingPath(item.path);
-    try {
-      await saveImage(item);
-    } catch {
-      window.alert('Download failed');
-    } finally {
-      setSavingPath(null);
-    }
-  };
-
   const allItems = data?.items ?? [];
   const shownItems = allItems.filter(
     (i) => i.rating >= ratingMin && (typeFilter === 'all' || i.kind === typeFilter),
   );
   const selectedItems = allItems.filter((i) => selected.has(i.path));
-  // Images the lightbox can page through (RAW is download-only), honoring filters.
-  const viewable = shownItems.filter((i) => i.kind === 'image');
+  // Everything in this folder the lightbox can page through. RAW now previews
+  // via its embedded JPEG, so it's included alongside images.
+  const viewable = shownItems;
   const activeIndex = active ? viewable.findIndex((i) => i.path === active.path) : -1;
   const allShownSelected = shownItems.length > 0 && shownItems.every((i) => selected.has(i.path));
   const hasContent = !!data && (data.folders.length > 0 || allItems.length > 0);
@@ -171,8 +160,7 @@ export function GalleryPage() {
 
   const tileTap = (it: GalleryItem) => {
     if (selecting) toggleSelect(it.path);
-    else if (it.kind === 'image') setActive(it);
-    else downloadRaw(it);
+    else setActive(it);
   };
 
   return (
@@ -296,34 +284,32 @@ export function GalleryPage() {
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
                     {shownItems.map((it) => {
                       const sel = selected.has(it.path);
-                      const isImage = it.kind === 'image';
+                      const isRaw = it.kind === 'raw';
                       return (
                         <button
                           key={it.path}
                           type="button"
                           onClick={() => tileTap(it)}
-                          className={`group relative aspect-square overflow-hidden rounded-lg transition active:scale-[0.98] ${
-                            isImage ? 'bg-surface ring-1 ring-border/60 hover:ring-primary-500/60' : 'flex flex-col items-center justify-center gap-1.5 border border-border bg-surface p-2 text-gray-400 hover:border-primary-500/50'
-                          } ${sel ? 'ring-2 ring-primary-500' : ''}`}
+                          className={`group relative aspect-square overflow-hidden rounded-lg bg-surface ring-1 transition active:scale-[0.98] ${
+                            sel ? 'ring-2 ring-primary-500' : 'ring-border/60 hover:ring-primary-500/60'
+                          }`}
                         >
-                          {isImage ? (
-                            <AuthImage
-                              src={`/gallery/thumb?path=${encodeURIComponent(it.path)}`}
-                              alt={it.name}
-                              className="h-full w-full [&>img]:transition-transform [&>img]:duration-300 group-hover:[&>img]:scale-110"
-                            />
-                          ) : (
-                            <>
-                              {savingPath === it.path ? (
-                                <Loader2 className="h-5 w-5 animate-spin text-primary-500" />
-                              ) : (
-                                <Download className="h-5 w-5 text-gray-500 transition group-hover:text-gray-300" />
-                              )}
-                              <span className="rounded bg-primary-500/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-primary-500">
-                                RAW
-                              </span>
-                              <span className="w-full truncate px-1 text-center text-[10px] text-gray-500">{it.name}</span>
-                            </>
+                          <AuthImage
+                            src={`/gallery/thumb?path=${encodeURIComponent(it.path)}`}
+                            alt={it.name}
+                            className="h-full w-full [&>img]:transition-transform [&>img]:duration-300 group-hover:[&>img]:scale-110"
+                            fallback={
+                              <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 p-2">
+                                <Download className="h-5 w-5 text-gray-500" />
+                                <span className="w-full truncate px-1 text-center text-[10px] text-gray-500">{it.name}</span>
+                              </div>
+                            }
+                          />
+
+                          {isRaw && (
+                            <div className="pointer-events-none absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-primary-300">
+                              RAW
+                            </div>
                           )}
 
                           {it.rating > 0 && (

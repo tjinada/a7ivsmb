@@ -27,6 +27,8 @@ RUN pnpm build
 # ── production ───────────────────────────────────────────────────────────────
 FROM node:20-alpine AS production
 RUN corepack enable && corepack prepare pnpm@10.11.0 --activate
+# exiftool: extracts the embedded JPEG preview from RAW files (.ARW etc.)
+RUN apk add --no-cache exiftool
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json ./packages/shared/

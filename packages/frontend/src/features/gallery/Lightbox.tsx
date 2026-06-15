@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type TouchEvent } from 'react';
-import { X, Download, Loader2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Download, Loader2, Trash2, ChevronLeft, ChevronRight, ImageOff } from 'lucide-react';
 import type { GalleryItem } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { saveImage } from './download';
@@ -29,12 +29,14 @@ export function Lightbox({
   total?: number;
 }) {
   const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
     let obj: string | null = null;
     setUrl(null);
+    setFailed(false);
     api
       .get(`/gallery/preview?path=${encodeURIComponent(photo.path)}`, { responseType: 'blob' })
       .then((res) => {
@@ -42,7 +44,7 @@ export function Lightbox({
         obj = URL.createObjectURL(res.data as Blob);
         setUrl(obj);
       })
-      .catch(() => {});
+      .catch(() => active && setFailed(true));
     return () => {
       active = false;
       if (obj) URL.revokeObjectURL(obj);
@@ -154,6 +156,23 @@ export function Lightbox({
             onClick={(e) => e.stopPropagation()}
             className="max-h-full max-w-full object-contain"
           />
+        ) : failed ? (
+          <div
+            className="flex flex-col items-center gap-3 text-center text-white/70"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ImageOff className="h-10 w-10" />
+            <p className="text-sm">Preview unavailable for this file.</p>
+            <button
+              type="button"
+              onClick={download}
+              disabled={saving}
+              className="flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20 disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Download original
+            </button>
+          </div>
         ) : (
           <Loader2 className="h-8 w-8 animate-spin text-white/70" />
         )}
