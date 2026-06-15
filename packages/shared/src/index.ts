@@ -60,6 +60,7 @@ export interface FtpStatus {
 export interface TransferEvent {
   name: string;
   path: string;       // absolute path on the share
+  relPath: string;    // POSIX path relative to the share root (for gallery URLs)
   size: number;       // bytes
   time: number;       // epoch milliseconds
   clientIp: string;

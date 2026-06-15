@@ -60,6 +60,7 @@ function record(absPath: string, size: number, ip: string): void {
   const evt: TransferEvent = {
     name: path.basename(absPath),
     path: absPath,
+    relPath: path.relative(config.photosPath, absPath).split(path.sep).join('/'),
     size,
     time: Date.now(),
     clientIp: ip,
