@@ -1,21 +1,32 @@
-import { useEffect, useState } from 'react';
-import { X, Download, Loader2, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState, type TouchEvent } from 'react';
+import { X, Download, Loader2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { GalleryItem } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { saveImage } from './download';
 import { StarRating } from './StarRating';
 
-/** Full-screen enlarge view. Native pinch-zoom; rate, download, delete, close. */
+/**
+ * Full-screen enlarge view. Native pinch-zoom; rate, download, delete, close,
+ * and move between images in the folder via arrows, swipe, or keyboard.
+ */
 export function Lightbox({
   photo,
   onClose,
   onRate,
   onDelete,
+  onPrev,
+  onNext,
+  index,
+  total,
 }: {
   photo: GalleryItem;
   onClose: () => void;
   onRate?: (stars: number) => void;
   onDelete?: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  index?: number;
+  total?: number;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -23,6 +34,7 @@ export function Lightbox({
   useEffect(() => {
     let active = true;
     let obj: string | null = null;
+    setUrl(null);
     api
       .get(`/gallery/preview?path=${encodeURIComponent(photo.path)}`, { responseType: 'blob' })
       .then((res) => {
@@ -37,6 +49,37 @@ export function Lightbox({
     };
   }, [photo.path]);
 
+  // Keyboard navigation (desktop): arrows move, Esc closes.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') onPrev?.();
+      else if (e.key === 'ArrowRight') onNext?.();
+      else if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onPrev, onNext, onClose]);
+
+  // Single-finger horizontal swipe to move between images.
+  // (Ignores multi-touch so pinch-zoom keeps working.)
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: TouchEvent) => {
+    touchStart.current =
+      e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+  };
+  const onTouchEnd = (e: TouchEvent) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx < 0) onNext?.();
+      else onPrev?.();
+    }
+  };
+
   const download = async () => {
     setSaving(true);
     try {
@@ -48,6 +91,8 @@ export function Lightbox({
     }
   };
 
+  const showCount = typeof index === 'number' && typeof total === 'number' && total > 1;
+
   return (
     <div
       className="fixed inset-0 z-[10000] flex flex-col bg-black/95"
@@ -57,7 +102,10 @@ export function Lightbox({
       }}
     >
       <div className="flex items-center justify-between gap-2 px-4 py-3 text-white">
-        <span className="min-w-0 flex-1 truncate text-sm">{photo.name}</span>
+        <span className="min-w-0 flex-1 truncate text-sm">
+          {photo.name}
+          {showCount && <span className="ml-2 text-xs text-white/50">{index! + 1} / {total}</span>}
+        </span>
         <button
           type="button"
           onClick={download}
@@ -93,7 +141,12 @@ export function Lightbox({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-2" onClick={onClose}>
+      <div
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-auto p-2"
+        onClick={onClose}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
         {url ? (
           <img
             src={url}
@@ -103,6 +156,33 @@ export function Lightbox({
           />
         ) : (
           <Loader2 className="h-8 w-8 animate-spin text-white/70" />
+        )}
+
+        {onPrev && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPrev();
+            }}
+            aria-label="Previous"
+            className="absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white/20 active:scale-95"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+        )}
+        {onNext && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNext();
+            }}
+            aria-label="Next"
+            className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white/20 active:scale-95"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
         )}
       </div>
     </div>

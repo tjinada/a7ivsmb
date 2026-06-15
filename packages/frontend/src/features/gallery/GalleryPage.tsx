@@ -132,6 +132,9 @@ export function GalleryPage() {
     (i) => i.rating >= ratingMin && (typeFilter === 'all' || i.kind === typeFilter),
   );
   const selectedItems = allItems.filter((i) => selected.has(i.path));
+  // Images the lightbox can page through (RAW is download-only), honoring filters.
+  const viewable = shownItems.filter((i) => i.kind === 'image');
+  const activeIndex = active ? viewable.findIndex((i) => i.path === active.path) : -1;
   const allShownSelected = shownItems.length > 0 && shownItems.every((i) => selected.has(i.path));
   const hasContent = !!data && (data.folders.length > 0 || allItems.length > 0);
 
@@ -402,9 +405,17 @@ export function GalleryPage() {
       {active && (
         <Lightbox
           photo={active}
+          index={activeIndex >= 0 ? activeIndex : undefined}
+          total={viewable.length}
           onClose={() => setActive(null)}
           onRate={(stars) => rate(active, stars)}
           onDelete={() => setPendingDelete([active])}
+          onPrev={activeIndex > 0 ? () => setActive(viewable[activeIndex - 1]) : undefined}
+          onNext={
+            activeIndex >= 0 && activeIndex < viewable.length - 1
+              ? () => setActive(viewable[activeIndex + 1])
+              : undefined
+          }
         />
       )}
 
