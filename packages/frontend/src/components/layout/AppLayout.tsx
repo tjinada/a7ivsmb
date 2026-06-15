@@ -7,7 +7,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { user, clear } = useAuthStore();
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col" style={{ height: '100dvh' }}>
       <header
         className="flex flex-shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-2"
         style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
