@@ -43,7 +43,16 @@ async function fileIntoFolder(abs: string): Promise<string> {
   const dest = path.join(destDir, name);
   if (dest === abs) return abs;
   await fs.mkdir(destDir, { recursive: true });
-  await fs.rename(abs, dest);
+  try {
+      await fs.rename(abs, dest);
+    } catch {
+      // unraid user shares (shfs) can place the source file and the
+      // destination folder on different physical disks, so rename() fails
+      // with EXDEV. Copy + delete works across devices.
+      await fs.copyFile(abs, dest);
+      await fs.unlink(abs);
+      logger.info(`copied ${name} across devices`, 'FTP');
+    }
   return dest;
 }
 

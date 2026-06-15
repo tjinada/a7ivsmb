@@ -71,3 +71,13 @@ Implemented in `ftp.service.ts` (`fileIntoFolder` + the STOR handler). `TZ` is
 set in `docker-compose.yml` (overridable via `.env`). Validated live: a JPEG
 and an ARW uploaded over FTP landed in `2026-06-14/JPG/` and `2026-06-14/RAW/`
 respectively, with the Toronto date correct despite a UTC server clock.
+
+### Cross-device fix (unraid multi-disk shares)
+
+unraid user shares (shfs/FUSE) span multiple physical disks, so a large file
+written to the share root and the date/bucket folder can land on different
+disks - making `fs.rename` fail with `EXDEV`. Symptom seen in the field: small
+JPEGs filed correctly while large RAW (.arw) files stayed in the root. The
+filing now falls back to `copyFile` + `unlink` when `rename` fails, which works
+across devices. Validated that the normal same-disk rename path still files
+JPEG + ARW correctly after the change.
