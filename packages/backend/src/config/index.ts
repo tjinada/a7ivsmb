@@ -15,6 +15,14 @@ export const config = {
   tokenTtl: '12h',
   refreshTtl: '30d',
 
+  // Login brute-force throttle (security hardening). In-memory, per-client-IP.
+  // Tunable via env; defaults suit a single-user app behind Cloudflare Access.
+  loginRateLimit: {
+    windowMs: Number(process.env.LOGIN_RATELIMIT_WINDOW_MS ?? 15 * 60 * 1000),
+    maxFails: Number(process.env.LOGIN_RATELIMIT_MAX_FAILS ?? 10),
+    blockMs: Number(process.env.LOGIN_RATELIMIT_BLOCK_MS ?? 15 * 60 * 1000),
+  },
+
   // Local JSON state (FTP config, recent transfers) + thumbnail cache
   dataDir: path.resolve(process.env.DATA_DIR ?? './data'),
 
