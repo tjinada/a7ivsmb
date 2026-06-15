@@ -47,8 +47,10 @@ type ShareNav = Navigator & {
 
 /**
  * Share one or more originals via the native share sheet (WhatsApp, Google
- * Photos, Drive, etc.). Returns false if the platform can't share files
- * (e.g. plain HTTP / unsupported browser) so the caller can fall back.
+ * Photos, Drive, etc.). Returns true once the sheet has been shown (even if
+ * the user cancels), so the caller NEVER also downloads. Returns false only
+ * where the platform can't share files (e.g. desktop) so the caller can
+ * fall back to a zip download.
  */
 export async function shareItems(items: GalleryItem[]): Promise<boolean> {
   const shareNav = navigator as ShareNav;
@@ -63,10 +65,11 @@ export async function shareItems(items: GalleryItem[]): Promise<boolean> {
   if (!shareNav.canShare?.({ files })) return false;
   try {
     await shareNav.share({ files });
-    return true;
   } catch {
-    return false; // cancelled or failed
+    // Cancelled, or the OS reported an error (iOS does this even after a
+    // successful share). The sheet was shown either way - never fall back.
   }
+  return true;
 }
 
 /** Download the selected files as a single photos.zip (built on the backend). */
