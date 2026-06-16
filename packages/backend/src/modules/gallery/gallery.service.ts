@@ -284,6 +284,60 @@ async function uniqueBase(
   return `${base}-${Date.now()}`;
 }
 
+/** Photo count + a cover image for a folder card (peeks one level into JPG/RAW). */
+async function folderSummary(absDir: string, root: string): Promise<{ count: number; cover?: string }> {
+  let dirents: import('node:fs').Dirent[];
+  try {
+    dirents = await fs.readdir(absDir, { withFileTypes: true });
+  } catch {
+    return { count: 0 };
+  }
+
+  let count = 0;
+  let cover: string | undefined;
+  let coverIsRaw = true;
+  const consider = (absFile: string, kind: GalleryItemKind) => {
+    count += 1;
+    if (!cover || (coverIsRaw && kind === 'image')) {
+      cover = toPosix(path.relative(root, absFile));
+      coverIsRaw = kind === 'raw';
+    }
+  };
+
+  const subdirs: string[] = [];
+  for (const e of dirents) {
+    if (e.name.startsWith('.')) continue;
+    if (e.isDirectory()) {
+      subdirs.push(e.name);
+      continue;
+    }
+    if (!e.isFile()) continue;
+    const kind = kindOf(e.name);
+    if (kind) consider(path.join(absDir, e.name), kind);
+  }
+
+  // Peek one level into subfolders. For the JPG/RAW split, count one bucket so
+  // a paired day reads as its shot count (and prefer JPG for a faster cover).
+  const jpg = subdirs.find((s) => s.toUpperCase() === 'JPG');
+  const raw = subdirs.find((s) => s.toUpperCase() === 'RAW');
+  const buckets = jpg && raw ? [jpg] : subdirs;
+  for (const sub of buckets) {
+    let subEntries: import('node:fs').Dirent[];
+    try {
+      subEntries = await fs.readdir(path.join(absDir, sub), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of subEntries) {
+      if (!e.isFile() || e.name.startsWith('.')) continue;
+      const kind = kindOf(e.name);
+      if (kind) consider(path.join(absDir, sub, e.name), kind);
+    }
+  }
+
+  return { count, cover };
+}
+
 export const galleryService = {
   /** List one directory (non-recursive): subfolders + image/raw items. */
   async browse(rel: string): Promise<GalleryBrowseResult> {
@@ -334,6 +388,15 @@ export const galleryService = {
       const t = twins.get(it.path);
       if (t) it.twin = t;
     }
+
+    // Folder cover image + photo count for each card.
+    await Promise.all(
+      folders.map(async (f) => {
+        const summary = await folderSummary(safeResolve(f.path), root);
+        f.count = summary.count;
+        f.cover = summary.cover;
+      }),
+    );
 
     const here = toPosix(path.relative(root, dir)); // '' at the root
     const parent = here === '' ? null : path.posix.dirname(here) === '.' ? '' : path.posix.dirname(here);

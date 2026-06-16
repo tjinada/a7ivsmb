@@ -48,11 +48,25 @@ function dateKey(it: GalleryItem): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function prettyDate(key: string): string {
+/** Friendly label for a YYYY-MM-DD string (Today/Yesterday, else a date). A
+ *  non-date string is returned unchanged, so it is safe on folder/crumb names. */
+function prettyDate(key: string, weekday = true): string {
   const m = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return key;
   const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const a = new Date();
+  a.setHours(0, 0, 0, 0);
+  const b = new Date(dt);
+  b.setHours(0, 0, 0, 0);
+  const diff = Math.round((a.getTime() - b.getTime()) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  return dt.toLocaleDateString(
+    undefined,
+    weekday
+      ? { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' },
+  );
 }
 
 const RATING_OPTS = [0, 3, 4, 5];
@@ -409,7 +423,7 @@ export function GalleryPage() {
                     }`}
                   >
                     {i === 0 && <Home className="h-3.5 w-3.5" />}
-                    {c.name}
+                    {prettyDate(c.name, false)}
                   </button>
                 </span>
               );
@@ -556,16 +570,44 @@ export function GalleryPage() {
                           key={f.path}
                           type="button"
                           onClick={() => setPath(f.path)}
-                          className="group flex items-start gap-3 rounded-xl border border-border bg-surface p-3 text-left transition hover:border-primary-500/50 active:scale-[0.98]"
+                          className="group flex flex-col overflow-hidden rounded-xl border border-border bg-surface text-left transition hover:border-primary-500/50 active:scale-[0.98]"
                         >
-                          <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary-500/10 text-primary-500">
-                            <Folder className="h-5 w-5" />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block break-words text-sm font-medium leading-snug text-gray-100">{f.name}</span>
-                            <span className="mt-0.5 block text-[11px] text-gray-500">Folder</span>
-                          </span>
-                          <ChevronRight className="mt-3 h-4 w-4 flex-shrink-0 text-gray-600 transition group-hover:translate-x-0.5 group-hover:text-gray-400" />
+                          <div className="relative aspect-[4/3] w-full bg-base">
+                            {f.cover ? (
+                              <AuthImage
+                                src={`/gallery/thumb?path=${encodeURIComponent(f.cover)}`}
+                                alt={f.name}
+                                className="h-full w-full [&>img]:transition-transform [&>img]:duration-300 group-hover:[&>img]:scale-105"
+                                fallback={
+                                  <div className="flex h-full w-full items-center justify-center text-primary-500/60">
+                                    <Folder className="h-8 w-8" />
+                                  </div>
+                                }
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-primary-500/60">
+                                <Folder className="h-8 w-8" />
+                              </div>
+                            )}
+                            {typeof f.count === 'number' && f.count > 0 && (
+                              <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+                                {f.count}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 px-2.5 py-2">
+                            <span className="min-w-0 flex-1">
+                              <span className="block break-words text-sm font-medium leading-snug text-gray-100">
+                                {prettyDate(f.name, false)}
+                              </span>
+                              <span className="mt-0.5 block text-[11px] text-gray-500">
+                                {typeof f.count === 'number'
+                                  ? `${f.count} ${f.count === 1 ? 'photo' : 'photos'}`
+                                  : 'Folder'}
+                              </span>
+                            </span>
+                            <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-600 transition group-hover:translate-x-0.5 group-hover:text-gray-400" />
+                          </div>
                         </button>
                       ))}
                     </div>

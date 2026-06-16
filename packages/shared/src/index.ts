@@ -73,6 +73,8 @@ export interface FolderEntry {
   name: string;
   path: string;       // POSIX path relative to the share root
   modified: number;   // epoch milliseconds
+  count?: number;     // photos inside (peeks one level into JPG/RAW)
+  cover?: string;     // share-relative path of a cover image, if any
 }
 
 /** 'image' = browser-renderable (thumbnailable); 'raw' = download-only. */
