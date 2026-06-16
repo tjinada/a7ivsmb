@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type TouchEvent, type ReactNode } from 'react';
 import {
-  X, Download, Loader2, Trash2, ChevronLeft, ChevronRight, ImageOff, Info, MapPin,
+  X, Download, Share2, Loader2, Trash2, ChevronLeft, ChevronRight, ImageOff, Info, MapPin,
 } from 'lucide-react';
 import type { GalleryItem, ExifInfo, ApiResponse } from '@sonycam/shared';
 import { api } from '@/api/client';
@@ -134,10 +134,10 @@ export function Lightbox({
           type="button"
           onClick={download}
           disabled={saving}
-          aria-label="Download"
+          aria-label="Share"
           className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-60"
         >
-          {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+          {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Share2 className="h-5 w-5" />}
         </button>
         {onDelete && (
           <button
