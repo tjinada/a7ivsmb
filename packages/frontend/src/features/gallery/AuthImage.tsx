@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ImageOff } from 'lucide-react';
-import { api } from '@/api/client';
 
 /**
- * Renders an image from an authorized endpoint. The JWT can't ride on a plain
- * <img src>, so we fetch the bytes as a blob (Bearer header via the api
- * client) and show an object URL. An IntersectionObserver defers the fetch
- * until the tile is near the viewport.
+ * Renders an image directly from an authorized endpoint. The image GET routes
+ * also accept a read-only "media" cookie (set at login), so a plain <img src>
+ * works without an Authorization header. That means the browser can HTTP-cache
+ * the image and iOS long-press "Share / Save" act on the real photo (not a
+ * blob: URL). Shows `fallback` (or a placeholder) if the image fails to load.
  */
 export function AuthImage({
   src,
@@ -21,57 +21,29 @@ export function AuthImage({
   eager?: boolean;
   fallback?: ReactNode;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(eager);
-  const [url, setUrl] = useState<string | null>(null);
+  const full = src.startsWith('/api') ? src : `/api${src}`;
   const [error, setError] = useState(false);
 
-  useEffect(() => {
-    if (visible || !ref.current) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setVisible(true);
-          obs.disconnect();
-        }
-      },
-      { rootMargin: '300px' },
-    );
-    obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [visible]);
-
-  useEffect(() => {
-    if (!visible) return;
-    let active = true;
-    let obj: string | null = null;
-    setError(false);
-    api
-      .get(src, { responseType: 'blob' })
-      .then((res) => {
-        if (!active) return;
-        obj = URL.createObjectURL(res.data as Blob);
-        setUrl(obj);
-      })
-      .catch(() => active && setError(true));
-    return () => {
-      active = false;
-      if (obj) URL.revokeObjectURL(obj);
-    };
-  }, [visible, src]);
+  // Reset on source change (a tile may be reused for a different item).
+  useEffect(() => setError(false), [full]);
 
   return (
-    <div ref={ref} className={className}>
-      {url ? (
-        <img src={url} alt={alt} className="h-full w-full object-cover" />
-      ) : error ? (
+    <div className={className}>
+      {error ? (
         fallback ?? (
           <div className="flex h-full w-full items-center justify-center bg-surface text-gray-600">
             <ImageOff className="h-5 w-5" />
           </div>
         )
       ) : (
-        <div className="h-full w-full animate-pulse bg-surface" />
+        <img
+          src={full}
+          alt={alt}
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          className="h-full w-full object-cover"
+          onError={() => setError(true)}
+        />
       )}
     </div>
   );

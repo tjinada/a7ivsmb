@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { galleryController } from './gallery.controller.js';
-import { requireAuth } from '../../middleware/index.js';
+import { requireAuth, requireMediaAuth } from '../../middleware/index.js';
 
 const router: Router = Router();
 
@@ -13,8 +13,8 @@ router.post('/rate-bulk', requireAuth, galleryController.rateBulk);
 router.get('/exif', requireAuth, galleryController.exif);
 router.post('/zip', requireAuth, galleryController.zip);
 router.post('/delete', requireAuth, galleryController.remove);
-router.get('/thumb', requireAuth, galleryController.thumb);
-router.get('/preview', requireAuth, galleryController.preview);
-router.get('/original', requireAuth, galleryController.original);
+router.get('/thumb', requireMediaAuth, galleryController.thumb);
+router.get('/preview', requireMediaAuth, galleryController.preview);
+router.get('/original', requireMediaAuth, galleryController.original);
 
 export const galleryRoutes = router;

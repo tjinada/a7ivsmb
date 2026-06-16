@@ -29,14 +29,16 @@ export const authService = {
     };
   },
 
-  refresh(refreshToken: string): { token: string; refreshToken: string } {
+  refresh(refreshToken: string): AuthResponse {
     const { username } = verifyRefreshToken(refreshToken);
     if (!safeEqual(username, config.appUser)) {
       throw new AppError('Invalid refresh token', 401);
     }
+    const user: AuthUser = { username };
     return {
       token: generateToken(username),
       refreshToken: generateRefreshToken(username),
+      user,
     };
   },
 };

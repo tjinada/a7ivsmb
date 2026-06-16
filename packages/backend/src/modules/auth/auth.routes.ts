@@ -7,6 +7,7 @@ const router: Router = Router();
 
 router.post('/login', loginRateLimit, authController.login);
 router.post('/refresh', loginRateLimit, authController.refresh);
+router.post('/logout', authController.logout);
 router.get('/me', requireAuth, authController.me);
 
 export const authRoutes = router;

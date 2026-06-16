@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 
 export const api = axios.create({
   baseURL: '/api',
+  withCredentials: true,
 });
 
 // Attach the access token to every request.
@@ -23,7 +24,11 @@ async function refreshTokens(): Promise<string | null> {
     return null;
   }
   try {
-    const res = await axios.post<ApiResponse<AuthResponse>>('/api/auth/refresh', { refreshToken });
+    const res = await axios.post<ApiResponse<AuthResponse>>(
+      '/api/auth/refresh',
+      { refreshToken },
+      { withCredentials: true },
+    );
     const data = res.data.data;
     if (!data) throw new Error('no data');
     setTokens(data.token, data.refreshToken);

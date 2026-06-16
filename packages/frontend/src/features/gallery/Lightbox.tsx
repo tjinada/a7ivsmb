@@ -30,30 +30,21 @@ export function Lightbox({
   index?: number;
   total?: number;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [exif, setExif] = useState<ExifInfo | null>(null);
   const [exifLoading, setExifLoading] = useState(false);
 
+  // The preview loads as a plain <img> (the media cookie authorizes it), so iOS
+  // long-press shares the real image and the browser can cache it.
+  const previewUrl = `/api/gallery/preview?path=${encodeURIComponent(photo.path)}`;
+
+  // Reset load/fail state when moving to a different photo.
   useEffect(() => {
-    let active = true;
-    let obj: string | null = null;
-    setUrl(null);
+    setLoaded(false);
     setFailed(false);
-    api
-      .get(`/gallery/preview?path=${encodeURIComponent(photo.path)}`, { responseType: 'blob' })
-      .then((res) => {
-        if (!active) return;
-        obj = URL.createObjectURL(res.data as Blob);
-        setUrl(obj);
-      })
-      .catch(() => active && setFailed(true));
-    return () => {
-      active = false;
-      if (obj) URL.revokeObjectURL(obj);
-    };
   }, [photo.path]);
 
   // Fetch EXIF lazily — only while the info panel is open, refetching per photo.
@@ -180,14 +171,7 @@ export function Lightbox({
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {url ? (
-          <img
-            src={url}
-            alt={photo.name}
-            onClick={(e) => e.stopPropagation()}
-            className="max-h-full max-w-full object-contain"
-          />
-        ) : failed ? (
+        {failed ? (
           <div
             className="flex flex-col items-center gap-3 text-center text-white/70"
             onClick={(e) => e.stopPropagation()}
@@ -205,7 +189,19 @@ export function Lightbox({
             </button>
           </div>
         ) : (
-          <Loader2 className="h-8 w-8 animate-spin text-white/70" />
+          <>
+            <img
+              key={previewUrl}
+              src={previewUrl}
+              alt={photo.name}
+              onClick={(e) => e.stopPropagation()}
+              onLoad={() => setLoaded(true)}
+              onError={() => setFailed(true)}
+              className="max-h-full max-w-full object-contain"
+              style={loaded ? undefined : { display: 'none' }}
+            />
+            {!loaded && <Loader2 className="h-8 w-8 animate-spin text-white/70" />}
+          </>
         )}
 
         {onPrev && (
