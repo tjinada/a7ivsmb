@@ -1,6 +1,8 @@
 # sonycamera-transfer — Design (Proposed)
 
-**Status:** Proposed 2026-06-14. Awaiting approval. No implementation started.
+**Status:** Approved & in build. Phases 1-3 and 5 implemented; Phase 4
+(Transfers + Settings UI) pending. Remote camera access over Tailscale is
+documented in [`REMOTE-ACCESS.md`](./REMOTE-ACCESS.md).
 This document is the single source of truth for the build.
 
 A PWA that (1) **receives** full-resolution photos from a Sony A7 IV via the
@@ -207,8 +209,10 @@ Each phase gets its own `docs/phases/PHASE-N-*.md` when we begin it.
 - Auto-sort arrivals into `yyyy/mm/dd` folders on receipt.
 - EXIF metadata view, search, multiple shares.
 - FTPS by default / certificate management.
-- Field / off-network phone-relay path (the dropped "Path B") — only if a
-  use case appears where the camera can't reach the unraid LAN.
+- Field / off-network access — **resolved without Path B.** A travel router
+  on the tailnet extends the LAN over Tailscale, so the camera reaches unraid
+  at its `100.x` IP exactly as on the home LAN; no phone-relay path needed.
+  See [`REMOTE-ACCESS.md`](./REMOTE-ACCESS.md).
 
 ---
 

@@ -6,8 +6,11 @@ services:
     ports:
       - "8096:3000"
       # FTP control port + passive data range (values come from .env).
+      # Passive range kept wide (~40 ports) so the camera's unclean data-socket
+      # closes don't exhaust the pool (see docs/TROUBLESHOOTING.md). The
+      # published range MUST match ftp.json's pasvMin/pasvMax.
       - "${FTP_PORT:-21}:${FTP_PORT:-21}"
-      - "${FTP_PASV_MIN:-50000}-${FTP_PASV_MAX:-50009}:${FTP_PASV_MIN:-50000}-${FTP_PASV_MAX:-50009}"
+      - "${FTP_PASV_MIN:-50000}-${FTP_PASV_MAX:-50049}:${FTP_PASV_MIN:-50000}-${FTP_PASV_MAX:-50049}"
     # Secrets + FTP settings (APP_*, JWT_SECRET, FTP_*) come from .env
     env_file:
       - .env
