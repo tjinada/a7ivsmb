@@ -54,6 +54,15 @@ export interface FtpStatus {
   ftps: boolean;
   activeConnections: number;
   lastReceived: number | null;
+  lastErrorTime: number | null;
+}
+
+/** One FTP-side failure, captured for in-app visibility (no secrets). */
+export interface FtpErrorEvent {
+  time: number;                                   // epoch milliseconds
+  kind: 'transfer' | 'filing' | 'client' | 'auth';
+  message: string;
+  clientIp?: string;
 }
 
 /** One received file, captured from an FTP STOR. */

@@ -55,3 +55,22 @@ heavier in memory. ~40 ports is ample for a single camera.
 leak in `ftp-srv` 4.6.3 rather than mere undersizing. The fix then is a
 connection idle-timeout or a library bump. Not worth pre-solving unless it
 actually happens.
+
+## In-app FTP error visibility
+
+The PASV exhaustion above was *silent* — uploads just stopped, and the only
+evidence lived in container logs. The Transfers screen now surfaces FTP
+failures directly:
+
+- The backend captures recent failures (rejected logins, failed uploads,
+  filing errors, and camera connection errors) into a ring buffer, exposed at
+  `GET /api/ftp/errors`, alongside a `lastErrorTime` on `/api/ftp/status`.
+- The Transfers screen shows a "Recent FTP errors" strip and tints the status
+  dot amber when the most recent FTP event was a failure rather than a
+  received file.
+
+Note: the `Unable to find valid port` line is emitted inside `ftp-srv`. If a
+recurrence surfaces as a socket-level `client-error` it appears in the strip;
+regardless, the strip catches the surrounding auth/transfer failures, and a
+sudden run of errors there is the in-app signal that something is wrong.
+

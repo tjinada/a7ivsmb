@@ -4,10 +4,14 @@ import { FtpSrv, type FtpSrvOptions } from 'ftp-srv';
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
 import { getFtpConfig } from './ftp.config.js';
-import type { FtpStatus, TransferEvent } from '@sonycam/shared';
+import type { FtpStatus, TransferEvent, FtpErrorEvent } from '@sonycam/shared';
 
 const MAX_RECENT = 100;
 const recent: TransferEvent[] = [];
+
+const MAX_ERRORS = 50;
+const recentErrors: FtpErrorEvent[] = [];
+let lastErrorTime: number | null = null;
 
 let server: FtpSrv | null = null;
 let listening = false;
@@ -72,6 +76,23 @@ function record(absPath: string, size: number, ip: string): void {
 }
 
 /**
+ * Capture an FTP-side failure for in-app visibility (Transfers screen) while
+ * still logging it as before. Kept non-secret: message + kind + client IP only.
+ */
+function recordError(
+  kind: FtpErrorEvent['kind'],
+  message: string,
+  ip?: string,
+  cause?: unknown,
+): void {
+  const evt: FtpErrorEvent = { time: Date.now(), kind, message, clientIp: ip };
+  recentErrors.unshift(evt);
+  if (recentErrors.length > MAX_ERRORS) recentErrors.pop();
+  lastErrorTime = evt.time;
+  logger.error(`${message}${ip ? ` (${ip})` : ''}`, 'FTP', cause instanceof Error ? cause : undefined);
+}
+
+/**
  * Ensure the receive target exists. Normally it already does (the bind-mount
  * in prod, or an existing folder/share in dev). Recursive mkdir on a UNC /
  * network-share root can fail even when the leaf already exists, so only
@@ -121,23 +142,24 @@ export async function startFtp(): Promise<void> {
   const srv = new FtpSrv(options);
 
   srv.on('login', ({ connection, username, password }, resolve, reject) => {
+    const ip = connection.ip ?? '?';
     if (username !== cfg.user || password !== cfg.pass) {
+      recordError('auth', `Rejected login for user "${username}"`, ip);
       reject(new Error('Invalid credentials'));
       return;
     }
     activeConnections++;
-    const ip = connection.ip ?? '?';
 
     connection.on('STOR', (error: Error | null, fileName: string) => {
       if (error) {
-        logger.error('FTP STOR failed', 'FTP', error);
+        recordError('transfer', `Upload failed: ${path.basename(fileName)}`, ip, error);
         return;
       }
       const abs = path.isAbsolute(fileName) ? fileName : path.join(config.photosPath, fileName);
       fileIntoFolder(abs)
         .then((dest) => fs.stat(dest).then((s) => record(dest, s.size, ip)))
         .catch((err: unknown) => {
-          logger.error('FTP auto-file failed', 'FTP', err as Error);
+          recordError('filing', `Could not file ${path.basename(abs)} into a dated folder`, ip, err);
           fs.stat(abs)
             .then((s) => record(abs, s.size, ip))
             .catch(() => record(abs, 0, ip));
@@ -152,7 +174,12 @@ export async function startFtp(): Promise<void> {
   srv.on('disconnect', () => {
     if (activeConnections > 0) activeConnections--;
   });
-  srv.on('client-error', ({ error }) => logger.error('FTP client error', 'FTP', error));
+  srv.on('client-error', ({ connection, context, error }) => {
+    const ip = (connection && connection.ip) || undefined;
+    const where = typeof context === 'string' && context ? ` during ${context}` : '';
+    const detail = (error && (error as Error).message) || 'connection error';
+    recordError('client', `Camera connection error${where}: ${detail}`, ip, error);
+  });
 
   await srv.listen();
   server = srv;
@@ -186,9 +213,14 @@ export function getStatus(): FtpStatus {
     ftps: cfg.ftpsEnabled,
     activeConnections,
     lastReceived,
+    lastErrorTime,
   };
 }
 
 export function getRecentTransfers(): TransferEvent[] {
   return [...recent];
+}
+
+export function getRecentErrors(): FtpErrorEvent[] {
+  return [...recentErrors];
 }

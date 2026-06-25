@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Download, Loader2, RefreshCw } from 'lucide-react';
-import type { ApiResponse, FtpStatus, TransferEvent, GalleryItem } from '@sonycam/shared';
+import { AlertTriangle, Download, Loader2, RefreshCw } from 'lucide-react';
+import type { ApiResponse, FtpStatus, TransferEvent, FtpErrorEvent, GalleryItem } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from '../gallery/AuthImage';
 import { Lightbox } from '../gallery/Lightbox';
@@ -36,6 +36,11 @@ async function fetchTransfers(): Promise<TransferEvent[]> {
   return res.data.data ?? [];
 }
 
+async function fetchErrors(): Promise<FtpErrorEvent[]> {
+  const res = await api.get<ApiResponse<FtpErrorEvent[]>>('/ftp/errors');
+  return res.data.data ?? [];
+}
+
 function StatusRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-2">
@@ -54,11 +59,26 @@ function StatusCard({ status }: { status?: FtpStatus }) {
     );
   }
 
+  const recentError =
+    status.lastErrorTime != null &&
+    (status.lastReceived == null || status.lastErrorTime > status.lastReceived);
   const state = !status.enabled ? 'disabled' : status.listening ? 'listening' : 'stopped';
   const dot =
-    state === 'listening' ? 'bg-green-500' : state === 'stopped' ? 'bg-amber-500' : 'bg-gray-500';
+    state === 'listening'
+      ? recentError
+        ? 'bg-amber-500'
+        : 'bg-green-500'
+      : state === 'stopped'
+        ? 'bg-amber-500'
+        : 'bg-gray-500';
   const label =
-    state === 'listening' ? 'Listening for transfers' : state === 'stopped' ? 'Not listening' : 'Receiver disabled';
+    state === 'listening'
+      ? recentError
+        ? 'Listening \u2014 last attempt failed'
+        : 'Listening for transfers'
+      : state === 'stopped'
+        ? 'Not listening'
+        : 'Receiver disabled';
 
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
@@ -96,6 +116,11 @@ export function TransfersPage() {
     queryFn: fetchTransfers,
     refetchInterval: 4000,
   });
+  const { data: errors } = useQuery({
+    queryKey: ['ftp', 'errors'],
+    queryFn: fetchErrors,
+    refetchInterval: 4000,
+  });
 
   const open = (t: TransferEvent) =>
     setActive({
@@ -114,6 +139,33 @@ export function TransfersPage() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {errors && errors.length > 0 && (
+          <div className="mb-3 overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/5">
+            <div className="flex items-center gap-2 border-b border-amber-500/20 px-3 py-2">
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-amber-400" />
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-400">
+                Recent FTP errors
+              </span>
+            </div>
+            <ul className="divide-y divide-amber-500/10">
+              {errors.slice(0, 5).map((e, i) => (
+                <li key={`${e.time}-${i}`} className="flex items-start gap-2 px-3 py-2">
+                  <span className="mt-0.5 flex-shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                    {e.kind}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-gray-200">{e.message}</p>
+                    <p className="text-[10px] text-gray-500">
+                      {fmtAgo(e.time)}
+                      {e.clientIp ? ` \u00b7 ${e.clientIp}` : ''}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="mb-2 flex items-center gap-2 px-1">
           <h2 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Recent arrivals</h2>
           <button
