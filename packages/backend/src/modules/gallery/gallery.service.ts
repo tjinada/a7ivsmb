@@ -308,8 +308,55 @@ async function uniqueBase(
   return `${base}-${Date.now()}`;
 }
 
+/** Sorted image/raw filenames directly inside one directory (empty if none). */
+async function imageNamesIn(dir: string): Promise<string[]> {
+  let dirents: import('node:fs').Dirent[];
+  try {
+    dirents = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return dirents
+    .filter((e) => e.isFile() && !e.name.startsWith('.') && kindOf(e.name) !== null)
+    .map((e) => e.name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Summary for an album card. Albums nest photos two levels deep
+ * (Selected/JPG, Selected/RAW, Edited), so the generic one-level peek misses
+ * them. Count is the curated Selected shot count; the cover is the first image
+ * (Selected JPG first, then Selected RAW, then an Edited final).
+ */
+async function albumSummary(albumAbs: string, root: string): Promise<{ count: number; cover?: string }> {
+  const selJpg = path.join(albumAbs, 'Selected', 'JPG');
+  const selRaw = path.join(albumAbs, 'Selected', 'RAW');
+  const edited = path.join(albumAbs, 'Edited');
+
+  const [jpgNames, rawNames, editedNames] = await Promise.all([
+    imageNamesIn(selJpg),
+    imageNamesIn(selRaw),
+    imageNamesIn(edited),
+  ]);
+
+  // One bucket = one shot count (JPG/RAW are twins of the same shots).
+  const count = jpgNames.length || rawNames.length || editedNames.length;
+
+  let coverAbs: string | null = null;
+  if (jpgNames.length) coverAbs = path.join(selJpg, jpgNames[0]);
+  else if (rawNames.length) coverAbs = path.join(selRaw, rawNames[0]);
+  else if (editedNames.length) coverAbs = path.join(edited, editedNames[0]);
+
+  return { count, cover: coverAbs ? toPosix(path.relative(root, coverAbs)) : undefined };
+}
+
 /** Photo count + a cover image for a folder card (peeks one level into JPG/RAW). */
 async function folderSummary(absDir: string, root: string): Promise<{ count: number; cover?: string }> {
+  // Albums nest photos two levels deep, so summarize them explicitly.
+  const relParts = toPosix(path.relative(root, absDir)).split('/');
+  if (relParts.length === 2 && relParts[0] === ALBUMS_ROOT) {
+    return albumSummary(absDir, root);
+  }
   let dirents: import('node:fs').Dirent[];
   try {
     dirents = await fs.readdir(absDir, { withFileTypes: true });
