@@ -21,7 +21,10 @@ router.post(
 router.put('/rating', requireAuth, galleryController.rate);
 router.post('/rate-bulk', requireAuth, galleryController.rateBulk);
 router.get('/exif', requireAuth, galleryController.exif);
-router.post('/zip', requireAuth, galleryController.zip);
+// Zip download is two steps: POST validates the selection and returns a token;
+// GET streams the archive (cookie-authed) so the browser downloads natively.
+router.post('/zip', requireAuth, galleryController.zipToken);
+router.get('/zip', requireMediaAuth, galleryController.zipDownload);
 router.post('/delete', requireAuth, galleryController.remove);
 router.get('/thumb', requireMediaAuth, galleryController.thumb);
 router.get('/preview', requireMediaAuth, galleryController.preview);

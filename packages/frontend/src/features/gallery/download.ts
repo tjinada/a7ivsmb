@@ -1,5 +1,5 @@
 import { api } from '@/api/client';
-import type { GalleryItem } from '@sonycam/shared';
+import type { GalleryItem, ApiResponse } from '@sonycam/shared';
 
 const originalUrl = (p: GalleryItem) => `/gallery/original?path=${encodeURIComponent(p.path)}`;
 
@@ -72,20 +72,24 @@ export async function shareItems(items: GalleryItem[]): Promise<boolean> {
   return true;
 }
 
-/** Download the selected files as a single photos.zip (built on the backend). */
+/**
+ * Download the selected files as a single photos.zip. We POST the selection to
+ * get a one-time token, then trigger a NATIVE browser download from the GET
+ * endpoint: the browser streams straight to disk (no multi-GB archive held in
+ * browser memory) and shows its own download progress. Resolves as soon as the
+ * download has been handed off to the browser.
+ */
 export async function downloadZip(items: GalleryItem[]): Promise<void> {
-  const res = await api.post(
-    '/gallery/zip',
-    { paths: items.map((i) => i.path) },
-    { responseType: 'blob' },
-  );
-  const blob = res.data as Blob;
-  const url = URL.createObjectURL(blob);
+  const res = await api.post<ApiResponse<{ token: string }>>('/gallery/zip', {
+    paths: items.map((i) => i.path),
+  });
+  const token = res.data.data?.token;
+  if (!token) throw new Error('Could not start the download');
+  // The server replies with Content-Disposition: attachment, so the browser
+  // saves the stream rather than navigating. The media cookie authorizes the GET.
   const a = document.createElement('a');
-  a.href = url;
-  a.download = 'photos.zip';
+  a.href = `/api/gallery/zip?token=${encodeURIComponent(token)}`;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
 }

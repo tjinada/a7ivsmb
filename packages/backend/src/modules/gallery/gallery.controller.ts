@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import archiver from 'archiver';
 import { galleryService, type Variant } from './gallery.service.js';
+import { issueZipToken, consumeZipToken } from './gallery.download-tokens.js';
 import { sendSuccess } from '../../utils/response.js';
 import { AppError } from '../../middleware/index.js';
 
@@ -122,15 +123,34 @@ export const galleryController = {
     return serveRendition(req, res, next, 'preview');
   },
 
-  async zip(req: Request, res: Response, next: NextFunction): Promise<void> {
+  /** Step 1 of a zip download: validate the selection and return a one-time
+   *  token. The browser then streams the archive from GET /zip?token=..., so
+   *  nothing is buffered in browser memory (see frontend download.ts). */
+  async zipToken(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = (req.body ?? {}) as { paths?: unknown };
       if (!Array.isArray(body.paths) || body.paths.some((p) => typeof p !== 'string')) {
         throw new AppError('paths must be an array of strings', 400);
       }
-      const files = await galleryService.resolveForZip(body.paths as string[]);
+      if (body.paths.length === 0) throw new AppError('No files selected', 400);
+      sendSuccess(res, { token: issueZipToken(body.paths as string[]) });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /** Step 2: stream the selected files as photos.zip for a native browser
+   *  download. Cookie-authed (requireMediaAuth) so a plain GET navigation works
+   *  and the browser writes straight to disk with its own progress UI. */
+  async zipDownload(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const token = typeof req.query.token === 'string' ? req.query.token : '';
+      const paths = consumeZipToken(token);
+      if (!paths) throw new AppError('This download link has expired, please try again', 404);
+      const files = await galleryService.resolveForZip(paths);
       res.set('Content-Type', 'application/zip');
       res.set('Content-Disposition', 'attachment; filename="photos.zip"');
+      res.set('Cache-Control', 'no-store');
       const archive = archiver('zip', { zlib: { level: 0 } });
       archive.on('error', (err) => res.destroy(err));
       archive.pipe(res);
