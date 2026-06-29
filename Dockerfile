@@ -28,7 +28,9 @@ RUN pnpm build
 FROM node:20-alpine AS production
 RUN corepack enable && corepack prepare pnpm@10.11.0 --activate
 # exiftool: extracts the embedded JPEG preview from RAW files (.ARW etc.)
-RUN apk add --no-cache exiftool
+# ttf-dejavu: a real font so sharp can render the "Preview" share watermark
+# (Alpine ships no fonts, so SVG text would otherwise come out blank).
+RUN apk add --no-cache exiftool ttf-dejavu
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json ./packages/shared/

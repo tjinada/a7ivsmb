@@ -14,6 +14,8 @@ import { Lightbox } from './Lightbox';
 import { ConfirmDialog } from './ConfirmDialog';
 import { CleanupDialog } from './CleanupDialog';
 import { AlbumDialog } from './AlbumDialog';
+import { ShareDialog } from './ShareDialog';
+import { ShareManager } from './ShareManager';
 import { StarRating } from './StarRating';
 import { shareItems, downloadZip } from './download';
 
@@ -92,9 +94,15 @@ export function GalleryPage() {
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [ratePickerOpen, setRatePickerOpen] = useState(false);
   const [albumOpen, setAlbumOpen] = useState<null | 'selection' | 'starred'>(null);
+  const [shareCreateOpen, setShareCreateOpen] = useState(false);
+  const [shareManagerOpen, setShareManagerOpen] = useState(false);
 
   const qc = useQueryClient();
   const isTimeline = view === 'timeline';
+  // An album root is exactly one segment under Albums/ (e.g. "Albums/June").
+  // That's the only place a client share can be created from.
+  const isAlbumRoot = /^Albums\/[^/]+$/.test(path);
+  const albumName = isAlbumRoot ? path.slice('Albums/'.length) : '';
 
   const browseQuery = useQuery({
     queryKey: ['gallery', 'browse', path],
@@ -142,6 +150,8 @@ export function GalleryPage() {
     setCleanupOpen(false);
     setRatePickerOpen(false);
     setAlbumOpen(null);
+    setShareCreateOpen(false);
+    setShareManagerOpen(false);
   }, [path]);
 
   // Switching view drops the current selection/menus (different item set).
@@ -152,6 +162,8 @@ export function GalleryPage() {
     setCleanupOpen(false);
     setRatePickerOpen(false);
     setAlbumOpen(null);
+    setShareCreateOpen(false);
+    setShareManagerOpen(false);
   }, [view]);
 
   const rateMut = useMutation({
@@ -543,6 +555,31 @@ export function GalleryPage() {
           </div>
         ) : hasContent ? (
           <div className="p-3">
+            {!isTimeline && isAlbumRoot && (
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-primary-500/30 bg-primary-500/[0.07] p-3">
+                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-500/15 text-primary-400">
+                  <Share2 className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-gray-100">Client proofing</p>
+                  <p className="text-[11px] text-gray-500">Share watermarked previews of the Edited photos.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShareManagerOpen(true)}
+                  className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-gray-200 transition hover:bg-surface"
+                >
+                  Manage
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShareCreateOpen(true)}
+                  className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-500"
+                >
+                  Share
+                </button>
+              </div>
+            )}
             {!isTimeline && folders.length > 0 && (
               <section className="mb-5">
                 {albumsFolder && (
@@ -802,6 +839,12 @@ export function GalleryPage() {
           onCancel={() => setAlbumOpen(null)}
         />
       )}
+
+      {shareCreateOpen && isAlbumRoot && (
+        <ShareDialog albumPath={path} albumName={albumName} onClose={() => setShareCreateOpen(false)} />
+      )}
+
+      {shareManagerOpen && <ShareManager onClose={() => setShareManagerOpen(false)} />}
     </div>
   );
 }

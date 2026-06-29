@@ -145,3 +145,48 @@ export interface GalleryBrowseResult {
   folders: FolderEntry[];
   items: GalleryItem[];
 }
+
+
+// ── Client shares (proofing links) ─────────────────────────────────────────
+
+/**
+ * A share moves through three phases:
+ *   proofing  – client browses watermarked previews and edits selections
+ *   submitted – client has locked their picks (owner reviews)
+ *   delivery  – owner has released full-res; client may download their picks
+ */
+export type SharePhase = 'proofing' | 'submitted' | 'delivery';
+
+/** Owner-facing summary of one share (no secrets). */
+export interface ShareSummary {
+  id: string;
+  slug: string;             // public URL token
+  albumName: string;
+  albumPath: string;        // share-relative, e.g. "Albums/June Wedding"
+  cap: number;              // max selections the client may make
+  phase: SharePhase;
+  previewCount: number;     // edited JPGs published as previews
+  selectedCount: number;
+  url: string;              // public client link (absolute when SHARE_HOST set)
+  createdAt: number;        // epoch ms
+  submittedAt: number | null;
+}
+
+/** Result of POST /api/gallery/shares (create). Same shape as a summary. */
+export type ShareCreateResult = ShareSummary;
+
+/** One previewable image in the client proofing view. */
+export interface SharePublicItem {
+  file: string;             // original edited filename; id for select/download
+  selected: boolean;
+}
+
+/** Client-facing state returned by GET /api/public/share/:slug/list.
+ *  Carries nothing about other shares and no secrets. */
+export interface SharePublicState {
+  albumName: string;
+  phase: SharePhase;
+  cap: number;
+  selectedCount: number;
+  items: SharePublicItem[];
+}

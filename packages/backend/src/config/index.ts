@@ -8,6 +8,12 @@ export const config = {
   isProduction: nodeEnv === 'production',
   port: Number(process.env.PORT ?? 3000),
 
+  // Hostname of the public client-share surface (Option B isolation). When set,
+  // the owner API + PWA shell 404 on this host, leaving only the /s/ client page
+  // and /api/public/ endpoints. Unset (dev) = isolation off, everything on one
+  // host. In production set this to e.g. "share.yourdomain.com".
+  shareHost: process.env.SHARE_HOST ?? '',
+
   // Single-user web auth
   appUser: process.env.APP_USER ?? 'admin',
   appPass: process.env.APP_PASS ?? '',
@@ -53,6 +59,15 @@ export const config = {
     ftpsEnabled: (process.env.FTPS_ENABLED ?? 'false') === 'true',
     tlsKeyPath: process.env.FTPS_KEY ?? '',
     tlsCertPath: process.env.FTPS_CERT ?? '',
+  },
+
+  // Client shares (proofing links). Previews are watermarked, downscaled JPEGs
+  // written under DATA_DIR/shares/<id>/previews; metadata lives in shares.json.
+  shares: {
+    previewMaxEdge: Number(process.env.SHARE_PREVIEW_MAX_EDGE ?? 1600),
+    previewQuality: Number(process.env.SHARE_PREVIEW_QUALITY ?? 80),
+    watermarkText: process.env.SHARE_WATERMARK_TEXT ?? 'Preview',
+    cookieTtlDays: Number(process.env.SHARE_COOKIE_TTL_DAYS ?? 7),
   },
 } as const;
 
