@@ -391,7 +391,14 @@ async function folderSummary(absDir: string, root: string): Promise<{ count: num
   // a paired day reads as its shot count (and prefer JPG for a faster cover).
   const jpg = subdirs.find((s) => s.toUpperCase() === 'JPG');
   const raw = subdirs.find((s) => s.toUpperCase() === 'RAW');
-  const buckets = jpg && raw ? [jpg] : subdirs;
+  let buckets = subdirs;
+  if (jpg && raw) {
+    // Count the fuller bucket (a shot's JPG and RAW are twins); this keeps a
+    // RAW-only folder from reading as 0, and prefers a JPG cover when present.
+    const jpgNames = await imageNamesIn(path.join(absDir, jpg));
+    const rawNames = await imageNamesIn(path.join(absDir, raw));
+    buckets = [jpgNames.length >= rawNames.length && jpgNames.length > 0 ? jpg : rawNames.length > 0 ? raw : jpg];
+  }
   for (const sub of buckets) {
     let subEntries: import('node:fs').Dirent[];
     try {
