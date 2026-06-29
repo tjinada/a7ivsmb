@@ -16,6 +16,7 @@ import { CleanupDialog } from './CleanupDialog';
 import { AlbumDialog } from './AlbumDialog';
 import { ShareDialog } from './ShareDialog';
 import { ShareManager } from './ShareManager';
+import { EditedUpload } from './EditedUpload';
 import { StarRating } from './StarRating';
 import { shareItems, downloadZip } from './download';
 
@@ -103,6 +104,9 @@ export function GalleryPage() {
   // That's the only place a client share can be created from.
   const isAlbumRoot = /^Albums\/[^/]+$/.test(path);
   const albumName = isAlbumRoot ? path.slice('Albums/'.length) : '';
+  // The Edited/ folder of an album — where edited JPGs can be uploaded.
+  const isEditedFolder = /^Albums\/[^/]+\/Edited$/.test(path);
+  const editedAlbumName = isEditedFolder ? path.split('/')[1] : '';
 
   const browseQuery = useQuery({
     queryKey: ['gallery', 'browse', path],
@@ -556,7 +560,7 @@ export function GalleryPage() {
         ) : hasContent ? (
           <div className="p-3">
             {!isTimeline && isAlbumRoot && (
-              <div className="mb-4 flex items-center gap-2 rounded-xl border border-primary-500/30 bg-primary-500/[0.07] p-3">
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-primary-500/30 bg-primary-500/[0.07] p-3">
                 <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-500/15 text-primary-400">
                   <Share2 className="h-5 w-5" />
                 </span>
@@ -564,6 +568,7 @@ export function GalleryPage() {
                   <p className="text-sm font-semibold text-gray-100">Client proofing</p>
                   <p className="text-[11px] text-gray-500">Share watermarked previews of the Edited photos.</p>
                 </div>
+                <EditedUpload albumName={albumName} onUploaded={() => refetch()} tone="subtle" />
                 <button
                   type="button"
                   onClick={() => setShareManagerOpen(true)}
@@ -578,6 +583,18 @@ export function GalleryPage() {
                 >
                   Share
                 </button>
+              </div>
+            )}
+            {!isTimeline && isEditedFolder && (
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface p-3">
+                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-500/15 text-primary-400">
+                  <Images className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-gray-100">Edited photos</p>
+                  <p className="text-[11px] text-gray-500">Upload finished JPGs. Clients download these after delivery.</p>
+                </div>
+                <EditedUpload albumName={editedAlbumName} onUploaded={() => refetch()} label="Upload" />
               </div>
             )}
             {!isTimeline && folders.length > 0 && (
@@ -698,8 +715,15 @@ export function GalleryPage() {
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface">
               <Images className="h-8 w-8 text-gray-600" />
             </div>
-            <p className="text-sm font-medium text-gray-300">{isTimeline ? 'No photos yet' : 'This folder is empty'}</p>
-            <p className="max-w-xs text-xs text-gray-500">Send photos from the camera over FTP, then tap refresh.</p>
+            <p className="text-sm font-medium text-gray-300">
+              {isTimeline ? 'No photos yet' : isEditedFolder ? 'No edited photos yet' : 'This folder is empty'}
+            </p>
+            <p className="max-w-xs text-xs text-gray-500">
+              {isEditedFolder
+                ? 'Upload your finished JPG edits here. Clients download them after you release delivery.'
+                : 'Send photos from the camera over FTP, then tap refresh.'}
+            </p>
+            {isEditedFolder && <EditedUpload albumName={editedAlbumName} onUploaded={() => refetch()} />}
           </div>
         )}
       </div>

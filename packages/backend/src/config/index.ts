@@ -14,6 +14,10 @@ export const config = {
   // host. In production set this to e.g. "share.yourdomain.com".
   shareHost: process.env.SHARE_HOST ?? '',
 
+  // Max size of one manual edited-image upload (raw request body). ~50MB easily
+  // covers a full-res edited JPG from the A7 IV.
+  uploadMaxBytes: Number(process.env.UPLOAD_MAX_BYTES ?? 50 * 1024 * 1024),
+
   // Single-user web auth
   appUser: process.env.APP_USER ?? 'admin',
   appPass: process.env.APP_PASS ?? '',

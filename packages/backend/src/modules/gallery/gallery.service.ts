@@ -264,6 +264,30 @@ function sanitizeAlbumName(raw: string): string {
   return name;
 }
 
+/** Extensions accepted for a manual edited-image upload (what shares consume). */
+const EDITED_UPLOAD_EXTS = new Set(['.jpg', '.jpeg']);
+
+/** Validate a manual upload filename; keep it a single safe JPG basename. */
+function sanitizeEditedFilename(raw: string): string {
+  const name = (raw ?? '').trim();
+  if (!name) throw new AppError('Filename is required', 400);
+  if (name.length > 200) throw new AppError('Filename is too long', 400);
+  if (/[\\/:*?"<>|]/.test(name) || name.includes('..') || name.startsWith('.')) {
+    throw new AppError('Filename has invalid characters', 400);
+  }
+  if (!EDITED_UPLOAD_EXTS.has(path.extname(name).toLowerCase())) {
+    throw new AppError('Only JPG files can be uploaded', 400);
+  }
+  return name;
+}
+
+/** Reject anything that isn't a real JPEG (SOI marker FF D8 FF). */
+function assertJpegMagic(data: Buffer): void {
+  if (data.length < 3 || data[0] !== 0xff || data[1] !== 0xd8 || data[2] !== 0xff) {
+    throw new AppError('File is not a valid JPEG', 400);
+  }
+}
+
 /** Find a basename free in both the JPG and RAW buckets (keeps a pair aligned). */
 async function uniqueBase(
   base: string,
@@ -545,6 +569,39 @@ export const galleryService = {
 
     if (shots === 0) throw new AppError('No valid photos to add to the album', 400);
     return { name: albumName, path: albumRel, shots, copied };
+  },
+
+  /**
+   * Save one manually uploaded edited JPG into `Albums/<name>/Edited/`. The
+   * album must already exist; the file is validated as a real JPEG and written
+   * atomically (temp + rename). A same-named file is overwritten so re-uploading
+   * a corrected edit replaces the old one.
+   */
+  async uploadEdited(
+    albumNameRaw: string,
+    filenameRaw: string,
+    data: Buffer,
+  ): Promise<{ name: string; size: number }> {
+    const albumName = sanitizeAlbumName(albumNameRaw);
+    const filename = sanitizeEditedFilename(filenameRaw);
+    if (data.length === 0) throw new AppError('No file data received', 400);
+    if (data.length > config.uploadMaxBytes) throw new AppError('File is too large', 413);
+    assertJpegMagic(data);
+
+    const albumAbs = safeResolve(`${ALBUMS_ROOT}/${albumName}`);
+    const albumStat = await fs.stat(albumAbs).catch(() => {
+      throw new AppError('Album not found', 404);
+    });
+    if (!albumStat.isDirectory()) throw new AppError('Album not found', 404);
+
+    const editedAbs = path.join(albumAbs, 'Edited');
+    await fs.mkdir(editedAbs, { recursive: true });
+
+    const destAbs = path.join(editedAbs, filename);
+    const tmp = `${destAbs}.tmp-${Date.now()}`;
+    await fs.writeFile(tmp, data);
+    await fs.rename(tmp, destAbs);
+    return { name: filename, size: data.length };
   },
 
   /** Validate paths for bulk download; returns {abs,name} with de-duped names. */

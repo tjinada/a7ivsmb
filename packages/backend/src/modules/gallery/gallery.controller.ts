@@ -101,6 +101,19 @@ export const galleryController = {
     }
   },
 
+  /** Manual upload of one edited JPG into an album's Edited/ folder. The file
+   *  rides as the raw request body (see express.raw on the route). */
+  async uploadEdited(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { albumName, filename } = req.params;
+      const data = req.body;
+      if (!Buffer.isBuffer(data)) throw new AppError('No file data received', 400);
+      sendSuccess(res, await galleryService.uploadEdited(albumName, filename, data), 201);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   thumb(req: Request, res: Response, next: NextFunction): Promise<void> {
     return serveRendition(req, res, next, 'thumb');
   },
