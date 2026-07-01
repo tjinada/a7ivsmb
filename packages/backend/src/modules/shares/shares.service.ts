@@ -1,5 +1,6 @@
 import { promises as fs, createReadStream } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import type { Readable } from 'node:stream';
 import sharp from 'sharp';
 import { config } from '../../config/index.js';
@@ -106,6 +107,25 @@ function watermarkSvg(): Buffer {
   return Buffer.from(svg);
 }
 
+/**
+ * Run `fn` over `items` with at most `limit` in flight at once, preserving input
+ * order in the results. No dependency — a small index-sharing worker pool.
+ */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = cursor;
+      cursor += 1;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
+}
+
 /** Regenerate the watermarked preview set for a share from its album's Edited/. */
 async function generatePreviews(id: string, albumPath: string): Promise<string[]> {
   const items = await listEditedJpgs(albumPath);
@@ -117,8 +137,12 @@ async function generatePreviews(id: string, albumPath: string): Promise<string[]
   const editedDir = path.join(safeAlbumDir(albumPath), EDITED_DIR);
   const mark = watermarkSvg();
   const { previewMaxEdge, previewQuality } = config.shares;
-  const produced: string[] = [];
-  for (const name of items) {
+
+  // Render previews concurrently across CPU cores (capped, since each full-res
+  // decode holds memory). Order is preserved; files sharp can't decode return
+  // null and are dropped, so the result reflects only previews that landed.
+  const concurrency = Math.max(1, Math.min(os.cpus().length, 4));
+  const results = await mapLimit(items, concurrency, async (name) => {
     const src = path.join(editedDir, name);
     const out = path.join(dir, previewNameFor(name));
     try {
@@ -128,12 +152,12 @@ async function generatePreviews(id: string, albumPath: string): Promise<string[]
         .composite([{ input: mark, gravity: 'southeast' }])
         .webp({ quality: previewQuality })
         .toFile(out);
-      produced.push(name);
+      return name;
     } catch {
-      /* skip files sharp can't decode; they simply won't appear as previews */
+      return null; // sharp couldn't decode it; it just won't appear as a preview
     }
-  }
-  return produced;
+  });
+  return results.filter((n): n is string => n !== null);
 }
 
 /** Project a record to its owner-facing summary (drops the password hash). */

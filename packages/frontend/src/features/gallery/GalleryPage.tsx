@@ -107,6 +107,9 @@ export function GalleryPage() {
   // The Edited/ folder of an album — where edited JPGs can be uploaded.
   const isEditedFolder = /^Albums\/[^/]+\/Edited$/.test(path);
   const editedAlbumName = isEditedFolder ? path.split('/')[1] : '';
+  // The album a share applies to, whether we're at its root or inside Edited/.
+  const shareAlbumName = albumName || editedAlbumName;
+  const shareAlbumPath = shareAlbumName ? `Albums/${shareAlbumName}` : '';
 
   const browseQuery = useQuery({
     queryKey: ['gallery', 'browse', path],
@@ -516,8 +519,8 @@ export function GalleryPage() {
         </div>
       </div>
 
-      {/* Filter bar */}
-      {allItems.length > 0 && !selecting && (
+      {/* Filter bar (not in the Edited folder — ratings/type don't apply there) */}
+      {allItems.length > 0 && !selecting && !isEditedFolder && (
         <div className="flex flex-shrink-0 items-center gap-2 overflow-x-auto border-b border-border bg-base px-3 py-2">
           <SlidersHorizontal className="h-3.5 w-3.5 flex-shrink-0 text-gray-500" />
           <div className="flex flex-shrink-0 rounded-lg bg-surface p-0.5">
@@ -595,6 +598,13 @@ export function GalleryPage() {
                   <p className="text-[11px] text-gray-500">Upload finished JPGs. Clients download these after delivery.</p>
                 </div>
                 <EditedUpload albumName={editedAlbumName} onUploaded={() => refetch()} label="Upload" />
+                <button
+                  type="button"
+                  onClick={() => setShareCreateOpen(true)}
+                  className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-500"
+                >
+                  Share
+                </button>
               </div>
             )}
             {!isTimeline && folders.length > 0 && (
@@ -864,8 +874,8 @@ export function GalleryPage() {
         />
       )}
 
-      {shareCreateOpen && isAlbumRoot && (
-        <ShareDialog albumPath={path} albumName={albumName} onClose={() => setShareCreateOpen(false)} />
+      {shareCreateOpen && shareAlbumName && (
+        <ShareDialog albumPath={shareAlbumPath} albumName={shareAlbumName} onClose={() => setShareCreateOpen(false)} />
       )}
 
       {shareManagerOpen && <ShareManager onClose={() => setShareManagerOpen(false)} />}

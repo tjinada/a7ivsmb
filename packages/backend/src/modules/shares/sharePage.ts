@@ -79,7 +79,7 @@ function renderProofing(){
     grid.appendChild(fig);
   });
   updateSubmit();
-  $('submit').onclick = doSubmit;
+  $('submit').onclick = confirmSubmit;
 }
 
 function toggle(file, fig){
@@ -97,7 +97,38 @@ function toggle(file, fig){
     .catch((e) => setStatus(e.message, true));
 }
 
-function updateSubmit(){ const b = $('submit'); if(b) b.disabled = sel.size === 0; }
+function updateSubmit(){
+  const b = $('submit');
+  if(!b) return;
+  b.disabled = sel.size === 0;
+  b.textContent = sel.size === 0
+    ? 'Submit selection'
+    : 'Submit ' + sel.size + ' photo' + (sel.size === 1 ? '' : 's');
+}
+
+function confirmSubmit(){
+  const n = sel.size;
+  if(n === 0) return;
+  const remaining = state.cap - n;
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML =
+    '<div class="modal">'
+    + '<h2>Submit your selection?</h2>'
+    + '<p class="muted">You have selected ' + n + ' of ' + state.cap + ' photo' + (state.cap === 1 ? '' : 's') + '.'
+    + (remaining > 0 ? ' You can still choose up to ' + remaining + ' more.' : '')
+    + '</p>'
+    + '<p class="muted">Once you submit, your selection is final and cannot be changed.</p>'
+    + '<div class="modal-actions">'
+    + '<button class="btn" id="mCancel">Keep choosing</button>'
+    + '<button class="btn primary" id="mOk">Submit</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', (e) => { if(e.target === overlay) close(); });
+  $('mCancel').onclick = close;
+  $('mOk').onclick = () => { close(); doSubmit(); };
+}
 
 function doSubmit(){
   const b = $('submit'); b.disabled = true; setStatus('Submitting…');
@@ -176,6 +207,14 @@ h1{ font-size:20px; margin:0 0 8px; }
 .footer .btn{ max-width:1072px; margin:0 auto; display:block; }
 .status{ text-align:center; min-height:18px; margin:0 0 8px; font-size:13px; color:var(--muted); }
 .status.err{ color:#ff6b6b; }
+.overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center;
+  justify-content:center; padding:24px; z-index:100; }
+.modal{ background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px;
+  max-width:340px; width:100%; }
+.modal h2{ font-size:17px; margin:0 0 10px; }
+.modal .muted{ margin:0 0 10px; }
+.modal-actions{ display:flex; gap:10px; margin-top:16px; }
+.modal-actions .btn{ flex:1; width:auto; }
 `;
 
 /** Render the full standalone client page for a share slug. */
