@@ -10,9 +10,9 @@ async function fetchShares(): Promise<ShareSummary[]> {
 }
 
 const PHASE_LABEL: Record<SharePhase, string> = {
-  proofing: 'Proofing',
-  submitted: 'Submitted',
-  delivery: 'Delivery',
+  proofing: 'Awaiting client picks',
+  submitted: 'Review picks and send to client',
+  delivery: 'Delivered to client',
 };
 const PHASE_CLASS: Record<SharePhase, string> = {
   proofing: 'bg-gray-500/15 text-gray-300',
@@ -20,9 +20,9 @@ const PHASE_CLASS: Record<SharePhase, string> = {
   delivery: 'bg-emerald-500/15 text-emerald-300',
 };
 
-/** Owner dashboard for client shares: status, copy link, release delivery,
- *  rebuild previews, and revoke. Selection status reflects what the client has
- *  picked so far (refresh to pull the latest). */
+/** Owner dashboard for client shares: status, copy link, send final photos,
+ *  refresh previews, and disable the link. Selection status reflects what the
+ *  client has picked so far (refresh to pull the latest). */
 export function ShareManager({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const sharesQuery = useQuery({ queryKey: ['shares'], queryFn: fetchShares });
@@ -33,17 +33,17 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
   const deliveryMut = useMutation({
     mutationFn: (id: string) => api.post(`/gallery/shares/${id}/delivery`),
     onSuccess: invalidate,
-    onError: () => window.alert('Could not enable delivery'),
+    onError: () => window.alert('Could not send the final photos'),
   });
   const refreshMut = useMutation({
     mutationFn: (id: string) => api.post(`/gallery/shares/${id}/refresh`),
     onSuccess: invalidate,
-    onError: () => window.alert('Could not rebuild previews'),
+    onError: () => window.alert('Could not refresh previews'),
   });
   const revokeMut = useMutation({
     mutationFn: (id: string) => api.delete(`/gallery/shares/${id}`),
     onSuccess: invalidate,
-    onError: () => window.alert('Could not revoke the share'),
+    onError: () => window.alert('Could not disable the link'),
   });
 
   const copy = async (s: ShareSummary) => {
@@ -57,7 +57,7 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
   };
 
   const revoke = (s: ShareSummary) => {
-    if (window.confirm(`Revoke the share for "${s.albumName}"? The client link will stop working.`)) {
+    if (window.confirm(`Disable the link for "${s.albumName}"? The client will no longer be able to open it.`)) {
       revokeMut.mutate(s.id);
     }
   };
@@ -102,17 +102,15 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
                   (revokeMut.isPending && revokeMut.variables === s.id);
                 return (
                   <div key={s.id} className="rounded-xl border border-border bg-base p-3">
-                    <div className="flex items-start gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-gray-100">{s.albumName}</p>
-                        <p className="mt-0.5 text-[11px] text-gray-500">
-                          {s.selectedCount} / {s.cap} selected &middot; {s.previewCount} preview
-                          {s.previewCount === 1 ? '' : 's'}
-                        </p>
-                      </div>
-                      <span className={`flex-shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium ${PHASE_CLASS[s.phase]}`}>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-100">{s.albumName}</p>
+                      <span className={`mt-1.5 inline-block rounded-md px-2 py-0.5 text-[11px] font-medium ${PHASE_CLASS[s.phase]}`}>
                         {PHASE_LABEL[s.phase]}
                       </span>
+                      <p className="mt-1.5 text-[11px] text-gray-500">
+                        {s.selectedCount} / {s.cap} selected &middot; {s.previewCount} preview
+                        {s.previewCount === 1 ? '' : 's'}
+                      </p>
                     </div>
 
                     <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -133,7 +131,7 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
                           className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
                         >
                           <Send className="h-3.5 w-3.5" />
-                          Release delivery
+                          Send final photos
                         </button>
                       )}
 
@@ -142,10 +140,10 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
                         onClick={() => refreshMut.mutate(s.id)}
                         disabled={busy}
                         className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-gray-200 transition hover:bg-surface disabled:opacity-50"
-                        title="Rebuild previews from the album's Edited/ folder"
+                        title="Refresh previews from the album's current Edited/ folder"
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${refreshMut.isPending && refreshMut.variables === s.id ? 'animate-spin' : ''}`} />
-                        Rebuild
+                        Refresh previews
                       </button>
 
                       <button
@@ -155,7 +153,7 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
                         className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-red-400 transition hover:bg-red-500/10 disabled:opacity-50"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        Revoke
+                        Disable link
                       </button>
                     </div>
                   </div>
