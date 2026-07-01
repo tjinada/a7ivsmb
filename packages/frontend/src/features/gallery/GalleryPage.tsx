@@ -580,14 +580,14 @@ export function GalleryPage() {
                     onClick={() => setShareManagerOpen(true)}
                     className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-gray-200 transition hover:bg-surface"
                   >
-                    Manage
+                    Manage links
                   </button>
                   <button
                     type="button"
                     onClick={() => setShareCreateOpen(true)}
                     className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-500"
                   >
-                    Share
+                    Create link
                   </button>
                 </div>
               </div>
@@ -610,7 +610,7 @@ export function GalleryPage() {
                     onClick={() => setShareCreateOpen(true)}
                     className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-500"
                   >
-                    Share
+                    Create link
                   </button>
                 </div>
               </div>
