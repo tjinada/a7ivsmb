@@ -569,8 +569,8 @@ export function GalleryPage() {
                     <Share2 className="h-5 w-5" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-100">Client proofing</p>
-                    <p className="text-[11px] text-gray-500">Share watermarked previews of the Edited photos.</p>
+                    <p className="text-sm font-semibold text-gray-100">Share with client</p>
+                    <p className="text-[11px] text-gray-500">Send clients a link to choose their favourite photos.</p>
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap items-start gap-2">
