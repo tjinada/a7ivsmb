@@ -32,9 +32,12 @@ async function api(pathName, opts){
 `;
 
 const JS_VIEWS = `
+let cells = new Map();
+
 function syncSel(){ sel.clear(); state.items.forEach((it) => { if(it.selected) sel.add(it.file); }); }
 
 function route(){
+  lbClose();
   if(!state){ renderGate(); return; }
   if(state.phase === 'delivery') renderDelivery();
   else if(state.phase === 'submitted') renderSubmitted();
@@ -63,6 +66,7 @@ function renderGate(){
 }
 
 function renderProofing(){
+  cells = new Map();
   $('app').innerHTML =
     '<div class="bar"><div><strong>' + escapeHtml(state.albumName) + '</strong>'
     + '<div class="muted">Tap to choose your favourites</div></div>'
@@ -71,30 +75,42 @@ function renderProofing(){
     + '<div class="footer"><p id="status" class="status"></p>'
     + '<button id="submit" class="btn primary">Submit selection</button></div>';
   const grid = $('grid');
-  state.items.forEach((it) => {
+  const files = state.items.map((it) => it.file);
+  state.items.forEach((it, i) => {
     const fig = document.createElement('figure');
     fig.className = 'cell' + (sel.has(it.file) ? ' on' : '');
-    fig.innerHTML = '<img loading="lazy" src="' + previewUrl(it.file) + '" alt=""/><span class="tick">✓</span>';
-    fig.onclick = () => toggle(it.file, fig);
+    fig.innerHTML = '<img loading="lazy" src="' + previewUrl(it.file) + '" alt=""/><span class="tick">✓</span>'
+      + '<button type="button" class="expand" aria-label="View larger">⤢</button>';
+    fig.onclick = () => toggleSel(it.file);
+    fig.querySelector('.expand').onclick = (ev) => { ev.stopPropagation(); openLightbox(files, i, 'select'); };
+    cells.set(it.file, fig);
     grid.appendChild(fig);
   });
   updateSubmit();
   $('submit').onclick = confirmSubmit;
 }
 
-function toggle(file, fig){
+/** Repaint everything selection-dependent (grid ticks, counters, lightbox). */
+function applySelUi(){
+  cells.forEach((fig, file) => fig.classList.toggle('on', sel.has(file)));
+  const c = $('cnt'); if(c) c.textContent = sel.size;
+  updateSubmit();
+  lbSync();
+}
+
+/** Toggle one file's selection and persist. Returns false if the cap blocked it. */
+function toggleSel(file){
   if(sel.has(file)){ sel.delete(file); }
   else {
-    if(sel.size >= state.cap){ setStatus('You can pick at most ' + state.cap + ' photos.', true); return; }
+    if(sel.size >= state.cap){ setStatus('You can pick at most ' + state.cap + ' photos.', true); return false; }
     sel.add(file);
   }
-  fig.classList.toggle('on');
-  $('cnt').textContent = sel.size;
-  updateSubmit();
+  applySelUi();
   setStatus('Saving…');
   api('/select', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ files: Array.from(sel) }) })
     .then((res) => { state = res.data; setStatus(''); })
     .catch((e) => setStatus(e.message, true));
+  return true;
 }
 
 function updateSubmit(){
@@ -138,30 +154,146 @@ function doSubmit(){
 }
 `;
 
+// Full-screen lightbox: full-aspect previews with swipe/arrow navigation.
+// Modes: 'select' (proofing; Select/Deselect button drives the same selection
+// logic as the grid), 'view' (submitted; read-only), 'download' (delivery).
+const JS_LIGHTBOX = `
+let lb = null; // { files, idx, mode, el }
+
+function lbSync(){
+  if(!lb) return;
+  const file = lb.files[lb.idx];
+  const img = lb.el.querySelector('.lb-img');
+  if(img.dataset.file !== file){
+    img.dataset.file = file;
+    img.src = previewUrl(file);
+  }
+  lb.el.querySelector('.lb-pos').textContent = (lb.idx + 1) + ' / ' + lb.files.length;
+  const cnt = lb.el.querySelector('.lb-cnt');
+  if(cnt) cnt.textContent = sel.size + ' / ' + state.cap + ' picked';
+  const act = lb.el.querySelector('.lb-action');
+  if(act && lb.mode === 'select'){
+    act.textContent = sel.has(file) ? 'Deselect' : 'Select';
+    act.classList.toggle('primary', !sel.has(file));
+  }
+  if(act && lb.mode === 'download'){
+    act.href = API + '/download/' + encodeURIComponent(file);
+  }
+}
+
+function lbClose(){
+  if(!lb) return;
+  document.removeEventListener('keydown', lbKeys);
+  lb.el.remove();
+  lb = null;
+}
+
+function lbStep(d){
+  if(!lb) return;
+  lb.idx = (lb.idx + d + lb.files.length) % lb.files.length;
+  const note = lb.el.querySelector('.lb-note');
+  if(note) note.textContent = '';
+  lbSync();
+}
+
+function lbKeys(ev){
+  if(ev.key === 'Escape') lbClose();
+  else if(ev.key === 'ArrowLeft') lbStep(-1);
+  else if(ev.key === 'ArrowRight') lbStep(1);
+}
+
+function openLightbox(files, idx, mode){
+  lbClose();
+  const el = document.createElement('div');
+  el.className = 'lb';
+  el.innerHTML =
+    '<div class="lb-top"><span class="lb-pos"></span>'
+    + (mode === 'select' ? '<span class="lb-cnt"></span>' : '')
+    + '<button type="button" class="lb-x" aria-label="Close">✕</button></div>'
+    + '<div class="lb-stage"><img class="lb-img" alt=""/></div>'
+    + '<button type="button" class="lb-nav lb-prev" aria-label="Previous">‹</button>'
+    + '<button type="button" class="lb-nav lb-next" aria-label="Next">›</button>'
+    + '<div class="lb-bottom">'
+    + (mode === 'select' ? '<p class="lb-note"></p><button type="button" class="btn lb-action"></button>' : '')
+    + (mode === 'download' ? '<a class="btn primary lb-action" href="#">Download</a>' : '')
+    + '</div>';
+  document.body.appendChild(el);
+  lb = { files, idx, mode, el };
+
+  el.querySelector('.lb-x').onclick = lbClose;
+  el.querySelector('.lb-prev').onclick = () => lbStep(-1);
+  el.querySelector('.lb-next').onclick = () => lbStep(1);
+  if(files.length < 2){
+    el.querySelector('.lb-prev').style.display = 'none';
+    el.querySelector('.lb-next').style.display = 'none';
+  }
+  // Tap the empty stage area (not the photo) to close.
+  el.querySelector('.lb-stage').onclick = (ev) => { if(ev.target === ev.currentTarget) lbClose(); };
+  const act = el.querySelector('.lb-action');
+  if(act && mode === 'select'){
+    act.onclick = () => {
+      const ok = toggleSel(lb.files[lb.idx]);
+      const note = lb.el.querySelector('.lb-note');
+      if(note) note.textContent = ok ? '' : 'You can pick at most ' + state.cap + ' photos.';
+    };
+  }
+
+  // Swipe left/right to navigate (touch devices).
+  let x0 = null;
+  el.addEventListener('touchstart', (ev) => { x0 = ev.touches[0].clientX; }, { passive: true });
+  el.addEventListener('touchend', (ev) => {
+    if(x0 === null) return;
+    const dx = ev.changedTouches[0].clientX - x0;
+    x0 = null;
+    if(Math.abs(dx) > 40) lbStep(dx < 0 ? 1 : -1);
+  }, { passive: true });
+
+  document.addEventListener('keydown', lbKeys);
+  lbSync();
+}
+`;
+
 const JS_DELIVERY = `
 function renderSubmitted(){
+  const picked = state.items.filter((it) => it.selected);
   const n = state.selectedCount;
   $('app').innerHTML =
     '<div class="card center">'
     + '<h1>Thank you!</h1>'
     + '<p class="muted">Your selection of ' + n + ' photo' + (n === 1 ? '' : 's')
     + ' has been sent. You\\'ll be able to download the final edits here once they are released.</p>'
-    + '</div>';
+    + '</div>'
+    + (picked.length ? '<h2 class="sec">Your selection (' + picked.length + ')</h2><div class="grid" id="grid"></div>' : '');
+  if(!picked.length) return;
+  const files = picked.map((it) => it.file);
+  const grid = $('grid');
+  picked.forEach((it, i) => {
+    const fig = document.createElement('figure');
+    fig.className = 'cell';
+    fig.innerHTML = '<img loading="lazy" src="' + previewUrl(it.file) + '" alt=""/>';
+    fig.onclick = () => openLightbox(files, i, 'view');
+    grid.appendChild(fig);
+  });
 }
 
 function renderDelivery(){
   const picked = state.items.filter((it) => it.selected);
-  let html =
+  const files = picked.map((it) => it.file);
+  $('app').innerHTML =
     '<div class="bar"><div><strong>' + escapeHtml(state.albumName) + '</strong>'
     + '<div class="muted">Your final images are ready</div></div>'
     + '<a class="btn primary" href="' + API + '/download-all">Download all</a></div>'
-    + '<div class="grid">';
-  picked.forEach((it) => {
-    html += '<figure class="cell"><img loading="lazy" src="' + previewUrl(it.file) + '" alt=""/>'
-      + '<a class="dl" href="' + API + '/download/' + encodeURIComponent(it.file) + '">Download</a></figure>';
+    + '<div class="grid" id="grid"></div>';
+  const grid = $('grid');
+  picked.forEach((it, i) => {
+    const fig = document.createElement('figure');
+    fig.className = 'cell';
+    fig.innerHTML = '<img loading="lazy" src="' + previewUrl(it.file) + '" alt=""/>'
+      + '<a class="dl" href="' + API + '/download/' + encodeURIComponent(it.file) + '">Download</a>';
+    fig.onclick = () => openLightbox(files, i, 'download');
+    fig.querySelector('.dl').onclick = (ev) => ev.stopPropagation();
+    grid.appendChild(fig);
   });
-  html += '</div>';
-  $('app').innerHTML = html;
 }
 
 api('/list', {})
@@ -169,7 +301,7 @@ api('/list', {})
   .catch(() => renderGate());
 `;
 
-const CLIENT_JS = JS_CORE + JS_VIEWS + JS_DELIVERY;
+const CLIENT_JS = JS_CORE + JS_VIEWS + JS_LIGHTBOX + JS_DELIVERY;
 
 const PAGE_CSS = `
 :root{ --bg:#0b0d10; --surface:#15181d; --border:#262b33; --text:#e7e9ee; --muted:#9aa3b2; --primary:#4f7cff; }
@@ -178,6 +310,7 @@ html,body{ margin:0; background:var(--bg); color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; }
 #app{ max-width:1100px; margin:0 auto; padding:16px 14px 96px; }
 h1{ font-size:20px; margin:0 0 8px; }
+h2.sec{ font-size:15px; font-weight:600; color:var(--muted); margin:26px 0 10px; }
 .muted{ color:var(--muted); font-size:14px; line-height:1.45; }
 .card{ background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:22px;
   max-width:360px; margin:14vh auto 0; }
@@ -200,6 +333,9 @@ h1{ font-size:20px; margin:0 0 8px; }
 .cell .tick{ position:absolute; top:8px; right:8px; width:26px; height:26px; border-radius:50%;
   background:var(--primary); color:#fff; display:none; align-items:center; justify-content:center; font-size:15px; }
 .cell.on .tick{ display:flex; }
+.cell .expand{ position:absolute; top:6px; left:6px; width:38px; height:38px; border-radius:50%; border:none;
+  background:rgba(0,0,0,.5); color:#fff; font-size:17px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; padding:0; }
 .cell .dl{ position:absolute; left:8px; right:8px; bottom:8px; text-align:center; padding:7px;
   background:rgba(0,0,0,.6); color:#fff; text-decoration:none; border-radius:8px; font-size:13px; font-weight:600; }
 .footer{ position:fixed; left:0; right:0; bottom:0; background:linear-gradient(transparent,var(--bg) 28%);
@@ -215,6 +351,20 @@ h1{ font-size:20px; margin:0 0 8px; }
 .modal .muted{ margin:0 0 10px; }
 .modal-actions{ display:flex; gap:10px; margin-top:16px; }
 .modal-actions .btn{ flex:1; width:auto; }
+.lb{ position:fixed; inset:0; z-index:200; background:rgba(4,6,9,.96); display:flex; flex-direction:column; }
+.lb-top{ display:flex; align-items:center; gap:14px; padding:12px 14px; color:var(--muted); font-size:14px; }
+.lb-top .lb-cnt{ font-weight:700; color:var(--text); }
+.lb-x{ margin-left:auto; width:38px; height:38px; border-radius:50%; border:none;
+  background:rgba(255,255,255,.08); color:#fff; font-size:16px; cursor:pointer; }
+.lb-stage{ flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:0 8px; }
+.lb-img{ max-width:100%; max-height:100%; object-fit:contain; border-radius:6px; }
+.lb-nav{ position:absolute; top:50%; transform:translateY(-50%); width:44px; height:64px; border:none;
+  background:rgba(255,255,255,.06); color:#fff; font-size:28px; cursor:pointer; border-radius:10px; }
+.lb-prev{ left:6px; }
+.lb-next{ right:6px; }
+.lb-bottom{ padding:12px 14px calc(14px + env(safe-area-inset-bottom)); }
+.lb-bottom .btn{ width:100%; max-width:420px; margin:0 auto; display:block; }
+.lb-note{ text-align:center; color:#ff6b6b; font-size:13px; min-height:18px; margin:0 0 8px; }
 `;
 
 /** Render the full standalone client page for a share slug. */
