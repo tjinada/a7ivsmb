@@ -75,14 +75,19 @@ export const config = {
   },
 } as const;
 
-/** Warn loudly if running with insecure defaults outside development. */
+/** Refuse to start in production with insecure auth config (S1 hardening).
+ *  Runs before app.listen(), so the port never opens with forgeable tokens. */
 export function assertConfig(): void {
-  if (config.isProduction) {
-    if (!config.appPass) {
-      console.warn('[config] APP_PASS is empty — login will be impossible.');
-    }
-    if (config.jwtSecret === 'dev-insecure-secret-change-me') {
-      console.warn('[config] JWT_SECRET is using the insecure default. Set a real one.');
-    }
+  if (!config.isProduction) return;
+  const fatal: string[] = [];
+  if (!config.appPass) {
+    fatal.push('APP_PASS is empty — set a real login password in .env.');
+  }
+  if (!config.jwtSecret || config.jwtSecret === 'dev-insecure-secret-change-me') {
+    fatal.push('JWT_SECRET is missing or still the insecure dev default — set a long random string in .env.');
+  }
+  if (fatal.length > 0) {
+    for (const msg of fatal) console.error(`[config] FATAL: ${msg}`);
+    process.exit(1);
   }
 }

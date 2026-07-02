@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Share2, Copy, Check, RefreshCw, Send, Trash2, X } from 'lucide-react';
 import type { ApiResponse, ShareSummary, SharePhase } from '@sonycam/shared';
 import { api } from '@/api/client';
+import { AuthImage } from './AuthImage';
 
 async function fetchShares(): Promise<ShareSummary[]> {
   const res = await api.get<ApiResponse<ShareSummary[]>>('/gallery/shares');
@@ -27,6 +28,8 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const sharesQuery = useQuery({ queryKey: ['shares'], queryFn: fetchShares });
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [copiedNamesId, setCopiedNamesId] = useState<string | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['shares'] });
 
@@ -53,6 +56,18 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
       setTimeout(() => setCopiedId((c) => (c === s.id ? null : c)), 1800);
     } catch {
       window.prompt('Copy this link', s.url);
+    }
+  };
+
+  /** Copy the client's picked filenames (one per line) for use in an editor. */
+  const copyNames = async (s: ShareSummary) => {
+    const text = s.selections.join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedNamesId(s.id);
+      setTimeout(() => setCopiedNamesId((c) => (c === s.id ? null : c)), 1800);
+    } catch {
+      window.prompt('Copy these filenames', text);
     }
   };
 
@@ -111,6 +126,46 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
                         {s.selectedCount} / {s.cap} selected &middot; {s.previewCount} preview
                         {s.previewCount === 1 ? '' : 's'}
                       </p>
+
+                      {s.phase !== 'proofing' && s.selections.length > 0 && (
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => setOpenId(openId === s.id ? null : s.id)}
+                            className="text-[11px] font-medium text-primary-400 transition hover:text-primary-300"
+                          >
+                            {openId === s.id ? 'Hide selection' : `View selection (${s.selections.length})`}
+                          </button>
+                          {openId === s.id && (
+                            <>
+                              <div className="mt-2 grid grid-cols-4 gap-1.5">
+                                {s.selections.map((f) => (
+                                  <figure key={f} className="m-0 min-w-0">
+                                    <AuthImage
+                                      src={`/gallery/thumb?path=${encodeURIComponent(`${s.albumPath}/Edited/${f}`)}`}
+                                      alt={f}
+                                      className="aspect-square overflow-hidden rounded-md bg-surface"
+                                    />
+                                    <figcaption className="mt-0.5 truncate text-[10px] text-gray-500">{f}</figcaption>
+                                  </figure>
+                                ))}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => copyNames(s)}
+                                className="mt-2 flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-gray-200 transition hover:bg-surface"
+                              >
+                                {copiedNamesId === s.id ? (
+                                  <Check className="h-3.5 w-3.5 text-emerald-400" />
+                                ) : (
+                                  <Copy className="h-3.5 w-3.5" />
+                                )}
+                                {copiedNamesId === s.id ? 'Copied' : 'Copy filenames'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="mt-3 flex flex-wrap items-center gap-1.5">

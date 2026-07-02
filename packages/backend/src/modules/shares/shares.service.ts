@@ -171,6 +171,7 @@ function toSummary(rec: ShareRecord): ShareSummary {
     phase: rec.phase,
     previewCount: rec.items.length,
     selectedCount: rec.selections.length,
+    selections: [...rec.selections],
     url: publicUrl(rec.slug),
     createdAt: rec.createdAt,
     submittedAt: rec.submittedAt,

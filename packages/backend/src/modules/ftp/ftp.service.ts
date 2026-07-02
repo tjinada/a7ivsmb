@@ -200,6 +200,14 @@ export async function stopFtp(): Promise<void> {
   }
 }
 
+/** Stop-then-start with the currently stored config. Used by the in-app
+ *  "apply settings" and "restart" actions (e.g. to clear a leaked passive
+ *  pool without recreating the container). */
+export async function restartFtp(): Promise<void> {
+  await stopFtp();
+  await startFtp();
+}
+
 export function getStatus(): FtpStatus {
   const cfg = getFtpConfig();
   return {

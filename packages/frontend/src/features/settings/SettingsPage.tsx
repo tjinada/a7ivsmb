@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/authStore';
+import { FtpCard } from './FtpCard';
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -9,8 +10,6 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-// Phase 1: shows identity + version. FTP config and the camera-setup helper
-// card are added here in Phase 4.
 export function SettingsPage() {
   const { user, clear } = useAuthStore();
 
@@ -23,9 +22,7 @@ export function SettingsPage() {
         <Row label="App version" value={__APP_VERSION__} />
       </div>
 
-      <p className="mt-4 text-xs text-gray-500">
-        FTP configuration and the camera-setup helper arrive in Phase 4.
-      </p>
+      <FtpCard />
 
       <button
         type="button"

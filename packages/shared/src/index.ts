@@ -42,6 +42,20 @@ export interface FtpConfig {
   ftpsEnabled: boolean;
 }
 
+/** Editable view of the FTP config returned by GET /api/ftp/config. The
+ *  password is never sent; `passSet` says whether one is stored. Port and
+ *  passive range are read-only in the UI: they must match the ports published
+ *  in docker-compose, so they are changed via .env + container recreate. */
+export interface FtpConfigView {
+  enabled: boolean;
+  user: string;
+  externalIp: string;
+  port: number;
+  pasvMin: number;
+  pasvMax: number;
+  passSet: boolean;
+}
+
 /** Non-secret FTP status returned by GET /api/ftp/status (no password). */
 export interface FtpStatus {
   enabled: boolean;
@@ -167,6 +181,7 @@ export interface ShareSummary {
   phase: SharePhase;
   previewCount: number;     // edited JPGs published as previews
   selectedCount: number;
+  selections: string[];     // the client's picked filenames (subset of previews)
   url: string;              // public client link (absolute when SHARE_HOST set)
   createdAt: number;        // epoch ms
   submittedAt: number | null;

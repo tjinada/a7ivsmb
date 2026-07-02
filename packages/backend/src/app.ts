@@ -19,10 +19,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app: Express = express();
 
-app.use(cors({
-  origin: config.isDevelopment ? ['http://localhost:5173'] : true,
-  credentials: true,
-}));
+// CORS is a dev-only affordance for the Vite dev server (S2 hardening). In
+// production the owner PWA and the share page are served same-origin by this
+// process, so no CORS headers are sent at all and browsers block credentialed
+// cross-origin reads by default.
+if (config.isDevelopment) {
+  app.use(cors({
+    origin: ['http://localhost:5173'],
+    credentials: true,
+  }));
+}
 app.use(express.json());
 app.use(requestLogger);
 
