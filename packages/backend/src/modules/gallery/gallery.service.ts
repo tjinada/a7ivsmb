@@ -16,11 +16,16 @@ import type {
   AlbumInfo,
   AlbumCreateResult,
   AlbumFormats,
+  BackfillPlanRow,
+  BackfillScanResult,
+  BackfillApplyResult,
 } from '@sonycam/shared';
 import {
   loadRatings, getRating, setRating, removeRating, removeRatingsByPrefix, renameRatingPrefix,
+  renameRatingKey,
 } from './ratings.store.js';
 import { albumHasShares, loadShares } from '../shares/index.js';
+import { captureDate } from '../../utils/captureDate.js';
 
 // Browser-renderable raster formats. RAW formats are previewed via their
 // embedded JPEG (see render/extractRawPreview). Anything else is hidden.
@@ -419,6 +424,99 @@ async function folderSummary(absDir: string, root: string): Promise<{ count: num
   return { count, cover };
 }
 
+/** A dated-folder segment, e.g. "2026-07-02". */
+const DATE_SEG_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** RAW/JPG bucket for a filename (mirrors the FTP filer's split). */
+function backfillBucket(name: string): 'RAW' | 'JPG' {
+  return RAW.has(path.extname(name).toLowerCase()) ? 'RAW' : 'JPG';
+}
+
+/**
+ * Build the date-backfill plan for a folder: photos sitting under a dated
+ * folder whose EXIF capture date disagrees with that folder. Pure inspection —
+ * no writes. JPG/RAW twins are resolved as one shot so a pair shares one
+ * capture date and moves together; a shot with no readable EXIF date is left
+ * untouched and reported as `unreadable`. Albums/ is never scanned.
+ */
+async function planBackfill(scanRel: string): Promise<{
+  rows: BackfillPlanRow[];
+  scanned: number;
+  unreadable: number;
+  alreadyCorrect: number;
+}> {
+  const root = path.resolve(config.photosPath);
+  const albumsRoot = path.join(root, ALBUMS_ROOT);
+  const scanAbs = safeResolve(scanRel);
+  const MAX_WALK = 20000;
+
+  // Collect photo files that live under a dated folder within the scan scope.
+  const collected: { relPath: string; name: string; folderDate: string }[] = [];
+  const walk = async (absDir: string): Promise<void> => {
+    if (collected.length >= MAX_WALK) return;
+    let dirents: import('node:fs').Dirent[];
+    try {
+      dirents = await fs.readdir(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of dirents) {
+      if (e.name.startsWith('.')) continue;
+      const abs = path.join(absDir, e.name);
+      if (e.isDirectory()) {
+        if (abs === albumsRoot) continue; // curated copies aren't date-filed
+        await walk(abs);
+        continue;
+      }
+      if (!e.isFile()) continue;
+      if (!kindOf(e.name)) continue;
+      const rel = toPosix(path.relative(root, abs));
+      const seg = rel.split('/').find((s) => DATE_SEG_RE.test(s));
+      if (!seg) continue; // only files already inside a dated folder qualify
+      collected.push({ relPath: rel, name: e.name, folderDate: seg });
+      if (collected.length >= MAX_WALK) return;
+    }
+  };
+  const scanStat = await fs.stat(scanAbs).catch(() => {
+    throw new AppError('Folder not found', 404);
+  });
+  if (!scanStat.isDirectory()) throw new AppError('Not a folder', 400);
+  await walk(scanAbs);
+
+  // Group into shots (JPG + its RAW twin share one capture date).
+  const groups = new Map<string, typeof collected>();
+  for (const c of collected) {
+    const k = pairKey(c.relPath);
+    const g = groups.get(k);
+    if (g) g.push(c);
+    else groups.set(k, [c]);
+  }
+
+  const rows: BackfillPlanRow[] = [];
+  let unreadable = 0;
+  let alreadyCorrect = 0;
+
+  for (const group of groups.values()) {
+    // One EXIF read per shot: prefer a JPG, fall back to the first file.
+    const probe = group.find((f) => kindOf(f.name) === 'image') ?? group[0];
+    const captured = await captureDate(safeResolve(probe.relPath));
+    if (!captured) {
+      unreadable += group.length;
+      continue;
+    }
+    for (const f of group) {
+      if (f.folderDate === captured) {
+        alreadyCorrect += 1;
+        continue;
+      }
+      const to = `${captured}/${backfillBucket(f.name)}/${f.name}`;
+      rows.push({ from: f.relPath, to, name: f.name, folderDate: f.folderDate, captureDate: captured });
+    }
+  }
+
+  return { rows, scanned: collected.length, unreadable, alreadyCorrect };
+}
+
 export const galleryService = {
   /** List one directory (non-recursive): subfolders + image/raw items. */
   async browse(rel: string): Promise<GalleryBrowseResult> {
@@ -584,6 +682,83 @@ export const galleryService = {
     await fs.rename(fromAbs, toAbs);
     await renameRatingPrefix(`${fromRel}/`, `${toRel}/`);
     return { name: newName, path: toRel };
+  },
+
+  /** Dry-run: report which photos under `rel` are in the wrong dated folder. */
+  async backfillScan(rel: string): Promise<BackfillScanResult> {
+    const plan = await planBackfill(rel);
+    return {
+      path: rel,
+      scanned: plan.scanned,
+      toMove: plan.rows.length,
+      unreadable: plan.unreadable,
+      alreadyCorrect: plan.alreadyCorrect,
+      rows: plan.rows,
+    };
+  },
+
+  /**
+   * Apply the backfill: re-plan `rel`, then move each misdated file into its
+   * correct dated JPG/RAW folder. Destinations that already hold a same-named
+   * file are skipped (never overwritten); ratings follow the moved file; dated
+   * folders left empty afterward are removed.
+   */
+  async backfillApply(rel: string): Promise<BackfillApplyResult> {
+    await loadRatings();
+    const root = path.resolve(config.photosPath);
+    const plan = await planBackfill(rel);
+
+    let moved = 0;
+    let skipped = 0;
+    let failed = 0;
+    const touchedDirs = new Set<string>();
+
+    for (const row of plan.rows) {
+      let fromAbs: string;
+      let toAbs: string;
+      try {
+        fromAbs = safeResolve(row.from);
+        toAbs = safeResolve(row.to);
+      } catch {
+        failed += 1;
+        continue;
+      }
+      if (fromAbs === toAbs) continue;
+      const src = await fs.stat(fromAbs).catch(() => null);
+      if (!src?.isFile()) {
+        failed += 1;
+        continue;
+      }
+      // Never overwrite an existing destination file.
+      if (await fs.stat(toAbs).catch(() => null)) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        await fs.mkdir(path.dirname(toAbs), { recursive: true });
+        try {
+          await fs.rename(fromAbs, toAbs);
+        } catch {
+          // Cross-device (unraid shfs) fallback: copy + delete.
+          await fs.copyFile(fromAbs, toAbs);
+          await fs.unlink(fromAbs);
+        }
+        await renameRatingKey(toPosix(path.relative(root, fromAbs)), toPosix(path.relative(root, toAbs)));
+        touchedDirs.add(path.dirname(fromAbs));
+        moved += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+
+    // Remove now-empty source buckets and their parent date folders.
+    for (const dir of touchedDirs) {
+      await fs.rmdir(dir).catch(() => {});
+      const parent = path.dirname(dir);
+      if (DATE_SEG_RE.test(path.basename(parent))) await fs.rmdir(parent).catch(() => {});
+    }
+
+    return { moved, skipped, failed };
   },
 
   /** Existing albums (subfolders under the share's Albums/ root). */

@@ -121,6 +121,28 @@ export const galleryController = {
     }
   },
 
+  /** Dry-run scan for the date backfill (no writes). */
+  async backfillScan(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = (req.body ?? {}) as { path?: unknown };
+      const rel = typeof body.path === 'string' ? body.path : '';
+      sendSuccess(res, await galleryService.backfillScan(rel));
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /** Apply the date backfill: move misdated photos into the right folders. */
+  async backfillApply(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = (req.body ?? {}) as { path?: unknown };
+      const rel = typeof body.path === 'string' ? body.path : '';
+      sendSuccess(res, await galleryService.backfillApply(rel));
+    } catch (err) {
+      next(err);
+    }
+  },
+
   /** Manual upload of one edited JPG into an album's Edited/ folder. The file
    *  rides as the raw request body (see express.raw on the route). */
   async uploadEdited(req: Request, res: Response, next: NextFunction): Promise<void> {

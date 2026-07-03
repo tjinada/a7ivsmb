@@ -1,9 +1,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
 import { FtpSrv, type FtpSrvOptions } from 'ftp-srv';
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
+import { captureDate } from '../../utils/captureDate.js';
 import { getFtpConfig } from './ftp.config.js';
 import type { FtpStatus, TransferEvent, FtpErrorEvent, StrayFile } from '@sonycam/shared';
 
@@ -38,39 +38,6 @@ function dateFolder(d = new Date()): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
-}
-
-/**
- * Read the shot's capture date (EXIF DateTimeOriginal) as a local YYYY-MM-DD.
- * The camera writes this in its own local time as a plain string, so we take
- * the date portion literally — no timezone math. Returns null if exiftool is
- * missing, the tag is absent, or the value can't be parsed, so callers fall
- * back to the arrival date.
- */
-function captureDate(abs: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    execFile(
-      config.exiftoolPath,
-      ['-j', '-DateTimeOriginal', '-CreateDate', abs],
-      { maxBuffer: 1024 * 1024 },
-      (err, stdout) => {
-        if (err) {
-          resolve(null);
-          return;
-        }
-        try {
-          const arr = JSON.parse(stdout.toString());
-          const rec = Array.isArray(arr) && arr[0] ? (arr[0] as Record<string, unknown>) : {};
-          const raw = rec.DateTimeOriginal ?? rec.CreateDate;
-          // exiftool date form: "YYYY:MM:DD HH:MM:SS" (may carry a subsec/zone).
-          const m = typeof raw === 'string' ? raw.match(/^(\d{4}):(\d{2}):(\d{2})/) : null;
-          resolve(m ? `${m[1]}-${m[2]}-${m[3]}` : null);
-        } catch {
-          resolve(null);
-        }
-      },
-    );
-  });
 }
 
 function bucketFor(name: string): 'RAW' | 'JPG' {

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Folder, ChevronRight, RefreshCw, Loader2, Images, Download, Home, Star, SlidersHorizontal,
   CheckSquare, CheckCircle2, Circle, Share2, Trash2, MoreVertical, CalendarDays, FolderPlus, Library,
-  Pencil,
+  Pencil, CalendarClock,
 } from 'lucide-react';
 import type {
   ApiResponse, GalleryBrowseResult, GalleryTimelineResult, GalleryItem,
@@ -19,6 +19,7 @@ import { ShareDialog } from './ShareDialog';
 import { ShareManager } from './ShareManager';
 import { EditedUpload } from './EditedUpload';
 import { RenameAlbumDialog } from './RenameAlbumDialog';
+import { BackfillDialog } from './BackfillDialog';
 import { StarRating } from './StarRating';
 import { shareItems, downloadZip } from './download';
 
@@ -113,6 +114,7 @@ export function GalleryPage() {
   const [shareManagerOpen, setShareManagerOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteAlbumOpen, setDeleteAlbumOpen] = useState(false);
+  const [backfillOpen, setBackfillOpen] = useState(false);
 
   const qc = useQueryClient();
   const isTimeline = view === 'timeline';
@@ -151,6 +153,9 @@ export function GalleryPage() {
   });
   const albumShares = (sharesQuery.data ?? []).filter((s) => s.albumPath === shareAlbumPath);
   const anySubmitted = (sharesQuery.data ?? []).some((s) => s.phase === 'submitted');
+  // Date backfill applies to dated capture folders, never to curated albums,
+  // so it's offered in folders view anywhere outside the Albums/ tree.
+  const canBackfill = !isTimeline && !path.startsWith('Albums');
 
   const activeQuery = isTimeline ? timelineQuery : browseQuery;
   const { isLoading, isError, isFetching } = activeQuery;
@@ -186,6 +191,7 @@ export function GalleryPage() {
     setShareManagerOpen(false);
     setRenameOpen(false);
     setDeleteAlbumOpen(false);
+    setBackfillOpen(false);
   }, [path]);
 
   // Switching view drops the current selection/menus (different item set).
@@ -534,7 +540,7 @@ export function GalleryPage() {
               >
                 <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
               </button>
-              {(allItems.length > 0 || isAlbumRoot) && (
+              {(allItems.length > 0 || isAlbumRoot || canBackfill) && (
                 <button
                   type="button"
                   onClick={() => setMenuOpen((o) => !o)}
@@ -599,6 +605,19 @@ export function GalleryPage() {
                           Delete low-rated&hellip;
                         </button>
                       </>
+                    )}
+                    {canBackfill && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          setBackfillOpen(true);
+                        }}
+                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-gray-200 transition hover:bg-surface hover:brightness-125"
+                      >
+                        <CalendarClock className="h-4 w-4 text-primary-500" />
+                        Re-file by date&hellip;
+                      </button>
                     )}
                   </div>
                 </>
@@ -1012,6 +1031,14 @@ export function GalleryPage() {
           busy={deleteAlbumMut.isPending}
           onConfirm={() => deleteAlbumMut.mutate(albumName)}
           onCancel={() => setDeleteAlbumOpen(false)}
+        />
+      )}
+      {backfillOpen && (
+        <BackfillDialog
+          path={path}
+          folderLabel={path === '' ? 'Home' : prettyDate(path.split('/').pop() ?? path, false)}
+          onApplied={() => qc.invalidateQueries({ queryKey: ['gallery'] })}
+          onClose={() => setBackfillOpen(false)}
         />
       )}
     </div>

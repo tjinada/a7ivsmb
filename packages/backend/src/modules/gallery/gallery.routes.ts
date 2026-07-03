@@ -11,6 +11,9 @@ router.get('/albums', requireAuth, galleryController.albums);
 router.post('/albums', requireAuth, galleryController.createAlbum);
 router.post('/albums/:name/rename', requireAuth, galleryController.renameAlbum);
 router.delete('/albums/:name', requireAuth, galleryController.deleteAlbum);
+// Date backfill: dry-run scan, then apply. Both take { path } in the body.
+router.post('/backfill/scan', requireAuth, galleryController.backfillScan);
+router.post('/backfill/apply', requireAuth, galleryController.backfillApply);
 // Manual upload of one edited JPG into an album's Edited/ folder. The file is
 // the raw request body (any content-type), captured as a Buffer up to the
 // configured size limit.

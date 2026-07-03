@@ -61,6 +61,18 @@ export async function renameRatingPrefix(from: string, to: string): Promise<void
   });
 }
 
+/** Move one rating from an old key to a new key (backfill file move). No-op
+ *  if the source has no rating; a rating already at `to` is overwritten. */
+export async function renameRatingKey(from: string, to: string): Promise<void> {
+  await store.update((cur) => {
+    if (!(from in cur) || from === to) return cur;
+    const next = { ...cur };
+    next[to] = cur[from];
+    delete next[from];
+    return next;
+  });
+}
+
 /** Drop a rating entry entirely (used when a file is deleted, later chunk). */
 export async function removeRating(relPath: string): Promise<void> {
   await store.update((cur) => {

@@ -160,6 +160,33 @@ export interface AlbumCreateResult {
   copied: number;           // files copied (JPG + RAW)
 }
 
+/** One planned move in the date backfill: a file whose dated folder disagrees
+ *  with its EXIF capture date. Paths are share-relative POSIX. */
+export interface BackfillPlanRow {
+  from: string;             // current share-relative path
+  to: string;               // corrected share-relative path
+  name: string;             // filename
+  folderDate: string;       // YYYY-MM-DD the file currently sits under
+  captureDate: string;      // YYYY-MM-DD from EXIF
+}
+
+/** Dry-run result of POST /api/gallery/backfill/scan. No files are changed. */
+export interface BackfillScanResult {
+  path: string;             // folder that was scanned (share-relative, '' = root)
+  scanned: number;          // photos inspected inside dated folders
+  toMove: number;           // files that would move (== rows.length)
+  unreadable: number;       // photos skipped: no readable EXIF date
+  alreadyCorrect: number;   // photos already in the right dated folder
+  rows: BackfillPlanRow[];  // the planned moves, for review
+}
+
+/** Result of POST /api/gallery/backfill/apply. */
+export interface BackfillApplyResult {
+  moved: number;
+  skipped: number;          // destination already had a same-named file
+  failed: number;           // move errored (see server logs)
+}
+
 /** One directory's contents, as returned by GET /api/gallery/browse. */
 export interface GalleryBrowseResult {
   path: string;            // current dir, POSIX relative ('' = share root)
