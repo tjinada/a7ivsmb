@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { sendSuccess } from '../../utils/response.js';
 import { AppError } from '../../middleware/index.js';
-import { getStatus, getRecentTransfers, getRecentErrors, restartFtp } from './ftp.service.js';
+import { getStatus, getRecentTransfers, getRecentErrors, restartFtp, listStrays, refileStrays } from './ftp.service.js';
 import { getFtpConfig, updateFtpConfig } from './ftp.config.js';
 import { ftpConfigUpdateSchema } from './ftp.validation.js';
 import type { FtpConfigView } from '@sonycam/shared';
@@ -29,6 +29,24 @@ export const ftpController = {
   },
   errors(_req: Request, res: Response): void {
     sendSuccess(res, getRecentErrors());
+  },
+
+  /** Photos stuck in the share root (failed filings) awaiting a re-file. */
+  async strays(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      sendSuccess(res, await listStrays());
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /** Re-run filing over every current stray; returns {filed, failed}. */
+  async refileStrays(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      sendSuccess(res, await refileStrays());
+    } catch (err) {
+      next(err);
+    }
   },
 
   config(_req: Request, res: Response): void {

@@ -31,6 +31,36 @@ export async function setRating(relPath: string, stars: number): Promise<number>
   return clamped;
 }
 
+/** Remove every rating whose key starts with `prefix` (album delete). */
+export async function removeRatingsByPrefix(prefix: string): Promise<void> {
+  await store.update((cur) => {
+    let changed = false;
+    const next: Ratings = {};
+    for (const [k, v] of Object.entries(cur)) {
+      if (k.startsWith(prefix)) changed = true;
+      else next[k] = v;
+    }
+    return changed ? next : cur;
+  });
+}
+
+/** Rewrite rating keys from one prefix to another (album rename). */
+export async function renameRatingPrefix(from: string, to: string): Promise<void> {
+  await store.update((cur) => {
+    let changed = false;
+    const next: Ratings = {};
+    for (const [k, v] of Object.entries(cur)) {
+      if (k.startsWith(from)) {
+        next[to + k.slice(from.length)] = v;
+        changed = true;
+      } else {
+        next[k] = v;
+      }
+    }
+    return changed ? next : cur;
+  });
+}
+
 /** Drop a rating entry entirely (used when a file is deleted, later chunk). */
 export async function removeRating(relPath: string): Promise<void> {
   await store.update((cur) => {

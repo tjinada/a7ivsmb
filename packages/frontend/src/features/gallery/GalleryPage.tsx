@@ -3,10 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Folder, ChevronRight, RefreshCw, Loader2, Images, Download, Home, Star, SlidersHorizontal,
   CheckSquare, CheckCircle2, Circle, Share2, Trash2, MoreVertical, CalendarDays, FolderPlus, Library,
+  Pencil,
 } from 'lucide-react';
 import type {
   ApiResponse, GalleryBrowseResult, GalleryTimelineResult, GalleryItem,
-  AlbumInfo, AlbumFormats, AlbumCreateResult,
+  AlbumInfo, AlbumFormats, AlbumCreateResult, ShareSummary, SharePhase,
 } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from './AuthImage';
@@ -17,6 +18,7 @@ import { AlbumDialog } from './AlbumDialog';
 import { ShareDialog } from './ShareDialog';
 import { ShareManager } from './ShareManager';
 import { EditedUpload } from './EditedUpload';
+import { RenameAlbumDialog } from './RenameAlbumDialog';
 import { StarRating } from './StarRating';
 import { shareItems, downloadZip } from './download';
 
@@ -36,6 +38,18 @@ async function fetchAlbums(): Promise<AlbumInfo[]> {
   const res = await api.get<ApiResponse<AlbumInfo[]>>('/gallery/albums');
   return res.data.data ?? [];
 }
+
+async function fetchShares(): Promise<ShareSummary[]> {
+  const res = await api.get<ApiResponse<ShareSummary[]>>('/gallery/shares');
+  return res.data.data ?? [];
+}
+
+/** Compact status pill shown on the "Share with client" card for an album. */
+const SHARE_PILL: Record<SharePhase, { label: string; cls: string }> = {
+  proofing: { label: 'Awaiting picks', cls: 'bg-gray-500/15 text-gray-300' },
+  submitted: { label: 'Picks submitted \u2014 review', cls: 'bg-amber-500/15 text-amber-300' },
+  delivery: { label: 'Delivered', cls: 'bg-emerald-500/15 text-emerald-300' },
+};
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
@@ -97,6 +111,8 @@ export function GalleryPage() {
   const [albumOpen, setAlbumOpen] = useState<null | 'selection' | 'starred'>(null);
   const [shareCreateOpen, setShareCreateOpen] = useState(false);
   const [shareManagerOpen, setShareManagerOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteAlbumOpen, setDeleteAlbumOpen] = useState(false);
 
   const qc = useQueryClient();
   const isTimeline = view === 'timeline';
@@ -126,6 +142,15 @@ export function GalleryPage() {
     queryFn: fetchAlbums,
     enabled: albumOpen !== null,
   });
+  // Client-share status. Enabled inside the Albums tree so the "Share with
+  // client" card can show a phase pill and Manage links can flag a submission.
+  const sharesQuery = useQuery({
+    queryKey: ['shares'],
+    queryFn: fetchShares,
+    enabled: !isTimeline && path.startsWith('Albums'),
+  });
+  const albumShares = (sharesQuery.data ?? []).filter((s) => s.albumPath === shareAlbumPath);
+  const anySubmitted = (sharesQuery.data ?? []).some((s) => s.phase === 'submitted');
 
   const activeQuery = isTimeline ? timelineQuery : browseQuery;
   const { isLoading, isError, isFetching } = activeQuery;
@@ -159,6 +184,8 @@ export function GalleryPage() {
     setAlbumOpen(null);
     setShareCreateOpen(false);
     setShareManagerOpen(false);
+    setRenameOpen(false);
+    setDeleteAlbumOpen(false);
   }, [path]);
 
   // Switching view drops the current selection/menus (different item set).
@@ -216,6 +243,38 @@ export function GalleryPage() {
     if (opts.paths.length === 0) return;
     createAlbumMut.mutate(opts);
   };
+
+  const renameAlbumMut = useMutation({
+    mutationFn: ({ name, newName }: { name: string; newName: string }) =>
+      api.post<ApiResponse<AlbumInfo>>(`/gallery/albums/${encodeURIComponent(name)}/rename`, { newName }),
+    onSuccess: (res) => {
+      const info = res.data.data;
+      qc.invalidateQueries({ queryKey: ['gallery'] });
+      setRenameOpen(false);
+      if (info) setPath(info.path);
+    },
+    onError: (err) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Could not rename the album';
+      window.alert(msg);
+    },
+  });
+
+  const deleteAlbumMut = useMutation({
+    mutationFn: (name: string) => api.delete(`/gallery/albums/${encodeURIComponent(name)}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['gallery'] });
+      setDeleteAlbumOpen(false);
+      setPath('Albums');
+    },
+    onError: (err) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Could not delete the album';
+      window.alert(msg);
+    },
+  });
 
   const rate = (item: GalleryItem, stars: number) => {
     patchActive((items) =>
@@ -475,7 +534,7 @@ export function GalleryPage() {
               >
                 <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
               </button>
-              {allItems.length > 0 && (
+              {(allItems.length > 0 || isAlbumRoot) && (
                 <button
                   type="button"
                   onClick={() => setMenuOpen((o) => !o)}
@@ -489,28 +548,58 @@ export function GalleryPage() {
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
                   <div className="absolute right-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setAlbumOpen('starred');
-                      }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-gray-200 transition hover:bg-surface hover:brightness-125"
-                    >
-                      <FolderPlus className="h-4 w-4 text-primary-500" />
-                      New album from starred&hellip;
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setCleanupOpen(true);
-                      }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-red-400 transition hover:bg-red-500/10"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete low-rated&hellip;
-                    </button>
+                    {isAlbumRoot && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            setRenameOpen(true);
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-gray-200 transition hover:bg-surface hover:brightness-125"
+                        >
+                          <Pencil className="h-4 w-4 text-primary-500" />
+                          Rename album&hellip;
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            setDeleteAlbumOpen(true);
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-red-400 transition hover:bg-red-500/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete album&hellip;
+                        </button>
+                      </>
+                    )}
+                    {allItems.length > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            setAlbumOpen('starred');
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-gray-200 transition hover:bg-surface hover:brightness-125"
+                        >
+                          <FolderPlus className="h-4 w-4 text-primary-500" />
+                          New album from starred&hellip;
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            setCleanupOpen(true);
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-red-400 transition hover:bg-red-500/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete low-rated&hellip;
+                        </button>
+                      </>
+                    )}
                   </div>
                 </>
               )}
@@ -573,14 +662,32 @@ export function GalleryPage() {
                     <p className="text-[11px] text-gray-500">Send clients a link to choose their favourite photos.</p>
                   </div>
                 </div>
+                {albumShares.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {albumShares.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setShareManagerOpen(true)}
+                        className={`rounded-md px-2 py-1 text-[11px] font-medium transition hover:brightness-125 ${SHARE_PILL[s.phase].cls}`}
+                      >
+                        {SHARE_PILL[s.phase].label}
+                        {s.phase !== 'delivery' && ` \u00b7 ${s.selectedCount}/${s.cap}`}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="mt-3 flex flex-wrap items-start gap-2">
                   <EditedUpload albumName={albumName} onUploaded={() => refetch()} tone="subtle" />
                   <button
                     type="button"
                     onClick={() => setShareManagerOpen(true)}
-                    className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-gray-200 transition hover:bg-surface"
+                    className="relative rounded-lg border border-border px-2.5 py-1.5 text-xs text-gray-200 transition hover:bg-surface"
                   >
                     Manage links
+                    {anySubmitted && (
+                      <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-base" />
+                    )}
                   </button>
                   <button
                     type="button"
@@ -887,6 +994,26 @@ export function GalleryPage() {
       )}
 
       {shareManagerOpen && <ShareManager onClose={() => setShareManagerOpen(false)} />}
+
+      {renameOpen && isAlbumRoot && (
+        <RenameAlbumDialog
+          currentName={albumName}
+          busy={renameAlbumMut.isPending}
+          onConfirm={(newName) => renameAlbumMut.mutate({ name: albumName, newName })}
+          onCancel={() => setRenameOpen(false)}
+        />
+      )}
+
+      {deleteAlbumOpen && isAlbumRoot && (
+        <ConfirmDialog
+          title={`Delete "${albumName}"?`}
+          message="This removes the album and its copied photos. Your originals in the date folders are not affected."
+          confirmLabel="Delete album"
+          busy={deleteAlbumMut.isPending}
+          onConfirm={() => deleteAlbumMut.mutate(albumName)}
+          onCancel={() => setDeleteAlbumOpen(false)}
+        />
+      )}
     </div>
   );
 }

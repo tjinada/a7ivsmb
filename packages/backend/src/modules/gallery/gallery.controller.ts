@@ -102,6 +102,25 @@ export const galleryController = {
     }
   },
 
+  async deleteAlbum(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await galleryService.deleteAlbum(req.params.name);
+      sendSuccess(res, { deleted: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async renameAlbum(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = (req.body ?? {}) as { newName?: unknown };
+      if (typeof body.newName !== 'string') throw new AppError('newName is required', 400);
+      sendSuccess(res, await galleryService.renameAlbum(req.params.name, body.newName));
+    } catch (err) {
+      next(err);
+    }
+  },
+
   /** Manual upload of one edited JPG into an album's Edited/ folder. The file
    *  rides as the raw request body (see express.raw on the route). */
   async uploadEdited(req: Request, res: Response, next: NextFunction): Promise<void> {

@@ -1,10 +1,11 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
 import { FtpSrv, type FtpSrvOptions } from 'ftp-srv';
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
 import { getFtpConfig } from './ftp.config.js';
-import type { FtpStatus, TransferEvent, FtpErrorEvent } from '@sonycam/shared';
+import type { FtpStatus, TransferEvent, FtpErrorEvent, StrayFile } from '@sonycam/shared';
 
 const MAX_RECENT = 100;
 const recent: TransferEvent[] = [];
@@ -24,6 +25,13 @@ const RAW_EXTS = new Set([
   '.arw', '.dng', '.cr2', '.cr3', '.nef', '.raf', '.rw2', '.orf', '.srw', '.pef', '.sr2', '.x3f',
 ]);
 
+// Extensions we know how to file. Anything else the camera drops (e.g. a stray
+// non-photo) is ignored by the stray lister so it doesn't churn the UI.
+const PHOTO_EXTS = new Set([
+  '.jpg', '.jpeg', '.png', '.webp', '.gif', '.tif', '.tiff', '.avif', '.heic', '.heif',
+  ...RAW_EXTS,
+]);
+
 /** Local-time YYYY-MM-DD. Honors the container's TZ env var. */
 function dateFolder(d = new Date()): string {
   const y = d.getFullYear();
@@ -32,31 +40,66 @@ function dateFolder(d = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Read the shot's capture date (EXIF DateTimeOriginal) as a local YYYY-MM-DD.
+ * The camera writes this in its own local time as a plain string, so we take
+ * the date portion literally — no timezone math. Returns null if exiftool is
+ * missing, the tag is absent, or the value can't be parsed, so callers fall
+ * back to the arrival date.
+ */
+function captureDate(abs: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile(
+      config.exiftoolPath,
+      ['-j', '-DateTimeOriginal', '-CreateDate', abs],
+      { maxBuffer: 1024 * 1024 },
+      (err, stdout) => {
+        if (err) {
+          resolve(null);
+          return;
+        }
+        try {
+          const arr = JSON.parse(stdout.toString());
+          const rec = Array.isArray(arr) && arr[0] ? (arr[0] as Record<string, unknown>) : {};
+          const raw = rec.DateTimeOriginal ?? rec.CreateDate;
+          // exiftool date form: "YYYY:MM:DD HH:MM:SS" (may carry a subsec/zone).
+          const m = typeof raw === 'string' ? raw.match(/^(\d{4}):(\d{2}):(\d{2})/) : null;
+          resolve(m ? `${m[1]}-${m[2]}-${m[3]}` : null);
+        } catch {
+          resolve(null);
+        }
+      },
+    );
+  });
+}
+
 function bucketFor(name: string): 'RAW' | 'JPG' {
   return RAW_EXTS.has(path.extname(name).toLowerCase()) ? 'RAW' : 'JPG';
 }
 
 /**
  * Move a freshly-received file into <share>/YYYY-MM-DD/<JPG|RAW>/, creating
- * the folders on demand, and return its final absolute path. The date is
- * stamped per file, so a session that crosses midnight splits correctly.
+ * the folders on demand, and return its final absolute path. The folder date
+ * is the shot's EXIF capture date when readable (so late/re-sent transfers
+ * land correctly), falling back to today's date otherwise.
  */
 async function fileIntoFolder(abs: string): Promise<string> {
   const name = path.basename(abs);
-  const destDir = path.join(config.photosPath, dateFolder(), bucketFor(name));
+  const day = (await captureDate(abs)) ?? dateFolder();
+  const destDir = path.join(config.photosPath, day, bucketFor(name));
   const dest = path.join(destDir, name);
   if (dest === abs) return abs;
   await fs.mkdir(destDir, { recursive: true });
   try {
-      await fs.rename(abs, dest);
-    } catch {
-      // unraid user shares (shfs) can place the source file and the
-      // destination folder on different physical disks, so rename() fails
-      // with EXDEV. Copy + delete works across devices.
-      await fs.copyFile(abs, dest);
-      await fs.unlink(abs);
-      logger.info(`copied ${name} across devices`, 'FTP');
-    }
+    await fs.rename(abs, dest);
+  } catch {
+    // unraid user shares (shfs) can place the source file and the
+    // destination folder on different physical disks, so rename() fails
+    // with EXDEV. Copy + delete works across devices.
+    await fs.copyFile(abs, dest);
+    await fs.unlink(abs);
+    logger.info(`copied ${name} across devices`, 'FTP');
+  }
   return dest;
 }
 
@@ -105,6 +148,56 @@ async function ensurePhotosDir(): Promise<void> {
     .catch(() => false);
   if (isDir) return;
   await fs.mkdir(config.photosPath, { recursive: true });
+}
+
+/**
+ * List "stray" photos: files sitting directly in the share root instead of a
+ * dated folder. That is exactly where a failed filing leaves them, so this is
+ * the owner's recovery surface. Non-recursive by design (dated folders and
+ * Albums are never scanned).
+ */
+export async function listStrays(): Promise<StrayFile[]> {
+  const root = config.photosPath;
+  let dirents: import('node:fs').Dirent[];
+  try {
+    dirents = await fs.readdir(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: StrayFile[] = [];
+  for (const e of dirents) {
+    if (!e.isFile() || e.name.startsWith('.')) continue;
+    if (!PHOTO_EXTS.has(path.extname(e.name).toLowerCase())) continue;
+    const s = await fs.stat(path.join(root, e.name)).catch(() => null);
+    if (!s) continue;
+    out.push({ name: e.name, size: s.size, modified: s.mtimeMs });
+  }
+  out.sort((a, b) => b.modified - a.modified);
+  return out;
+}
+
+/**
+ * Re-run filing over every current stray. Each success moves the file into its
+ * dated JPG/RAW folder and records it as a normal arrival; each failure is
+ * captured in the FTP error buffer. Returns how many were filed vs. failed.
+ */
+export async function refileStrays(): Promise<{ filed: number; failed: number }> {
+  const strays = await listStrays();
+  let filed = 0;
+  let failed = 0;
+  for (const stray of strays) {
+    const abs = path.join(config.photosPath, stray.name);
+    try {
+      const dest = await fileIntoFolder(abs);
+      const s = await fs.stat(dest);
+      record(dest, s.size, 'refile');
+      filed += 1;
+    } catch (err) {
+      recordError('filing', `Could not file ${stray.name} into a dated folder`, undefined, err);
+      failed += 1;
+    }
+  }
+  return { filed, failed };
 }
 
 /** Start the embedded FTP server, if enabled and a password is configured. */

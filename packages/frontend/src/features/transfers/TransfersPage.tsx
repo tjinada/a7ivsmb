@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Download, Loader2, RefreshCw } from 'lucide-react';
-import type { ApiResponse, FtpStatus, TransferEvent, FtpErrorEvent, GalleryItem } from '@sonycam/shared';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Download, Loader2, RefreshCw, FolderInput } from 'lucide-react';
+import type {
+  ApiResponse, FtpStatus, TransferEvent, FtpErrorEvent, GalleryItem, StrayFile,
+} from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from '../gallery/AuthImage';
 import { Lightbox } from '../gallery/Lightbox';
@@ -38,6 +40,11 @@ async function fetchTransfers(): Promise<TransferEvent[]> {
 
 async function fetchErrors(): Promise<FtpErrorEvent[]> {
   const res = await api.get<ApiResponse<FtpErrorEvent[]>>('/ftp/errors');
+  return res.data.data ?? [];
+}
+
+async function fetchStrays(): Promise<StrayFile[]> {
+  const res = await api.get<ApiResponse<StrayFile[]>>('/ftp/strays');
   return res.data.data ?? [];
 }
 
@@ -105,11 +112,29 @@ function StatusCard({ status }: { status?: FtpStatus }) {
 
 export function TransfersPage() {
   const [active, setActive] = useState<GalleryItem | null>(null);
+  const qc = useQueryClient();
 
   const { data: status } = useQuery({
     queryKey: ['ftp', 'status'],
     queryFn: fetchStatus,
     refetchInterval: 4000,
+  });
+  const { data: strays } = useQuery({
+    queryKey: ['ftp', 'strays'],
+    queryFn: fetchStrays,
+    refetchInterval: 8000,
+  });
+  const refileMut = useMutation({
+    mutationFn: () => api.post<ApiResponse<{ filed: number; failed: number }>>('/ftp/strays/refile'),
+    onSuccess: (res) => {
+      const r = res.data.data;
+      qc.invalidateQueries({ queryKey: ['ftp'] });
+      qc.invalidateQueries({ queryKey: ['gallery'] });
+      if (r && r.failed > 0) {
+        window.alert(`Filed ${r.filed}, but ${r.failed} still couldn't be filed. Check the errors above.`);
+      }
+    },
+    onError: () => window.alert('Could not re-file the photos'),
   });
   const { data: transfers, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['ftp', 'transfers'],
@@ -139,6 +164,33 @@ export function TransfersPage() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {strays && strays.length > 0 && (
+          <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                <FolderInput className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-100">
+                  {strays.length} file{strays.length === 1 ? '' : 's'} couldn&rsquo;t be filed
+                </p>
+                <p className="text-[11px] text-gray-500">
+                  They landed in the share root instead of a dated folder.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => refileMut.mutate()}
+                disabled={refileMut.isPending}
+                className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-amber-500 disabled:opacity-50"
+              >
+                {refileMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderInput className="h-3.5 w-3.5" />}
+                File them now
+              </button>
+            </div>
+          </div>
+        )}
+
         {errors && errors.length > 0 && (
           <div className="mb-3 overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/5">
             <div className="flex items-center gap-2 border-b border-amber-500/20 px-3 py-2">

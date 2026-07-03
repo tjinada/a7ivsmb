@@ -43,6 +43,11 @@ export function getShareById(id: string): ShareRecord | null {
   return store.get()[id] ?? null;
 }
 
+/** True if any share is bound to this album path (blocks rename/delete). */
+export function albumHasShares(albumPath: string): boolean {
+  return Object.values(store.get()).some((s) => s.albumPath === albumPath);
+}
+
 export function getShareBySlug(slug: string): ShareRecord | null {
   return Object.values(store.get()).find((s) => s.slug === slug) ?? null;
 }

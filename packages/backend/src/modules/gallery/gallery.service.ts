@@ -17,7 +17,10 @@ import type {
   AlbumCreateResult,
   AlbumFormats,
 } from '@sonycam/shared';
-import { loadRatings, getRating, setRating, removeRating } from './ratings.store.js';
+import {
+  loadRatings, getRating, setRating, removeRating, removeRatingsByPrefix, renameRatingPrefix,
+} from './ratings.store.js';
+import { albumHasShares, loadShares } from '../shares/index.js';
 
 // Browser-renderable raster formats. RAW formats are previewed via their
 // embedded JPEG (see render/extractRawPreview). Anything else is hidden.
@@ -530,6 +533,57 @@ export const galleryService = {
     });
     if (!stat.isFile()) throw new AppError('Not a file', 400);
     return buildExif(await exiftoolJson(file));
+  },
+
+  /**
+   * Delete a whole album (its copied Selected/Edited files) and prune the
+   * ratings that pointed into it. Originals in the date folders are untouched.
+   * Blocked while a client share still references the album.
+   */
+  async deleteAlbum(name: string): Promise<void> {
+    await loadRatings();
+    await loadShares();
+    const albumName = sanitizeAlbumName(name);
+    const albumRel = `${ALBUMS_ROOT}/${albumName}`;
+    if (albumHasShares(albumRel)) {
+      throw new AppError('Disable this album\u2019s client link before deleting it', 409);
+    }
+    const albumAbs = safeResolve(albumRel);
+    const stat = await fs.stat(albumAbs).catch(() => {
+      throw new AppError('Album not found', 404);
+    });
+    if (!stat.isDirectory()) throw new AppError('Album not found', 404);
+    await fs.rm(albumAbs, { recursive: true, force: true });
+    await removeRatingsByPrefix(`${albumRel}/`);
+  },
+
+  /**
+   * Rename an album folder and remap the ratings keyed under it. Blocked while
+   * a client share references it, and when the target name already exists.
+   */
+  async renameAlbum(name: string, newNameRaw: string): Promise<AlbumInfo> {
+    await loadRatings();
+    await loadShares();
+    const albumName = sanitizeAlbumName(name);
+    const newName = sanitizeAlbumName(newNameRaw);
+    const fromRel = `${ALBUMS_ROOT}/${albumName}`;
+    const toRel = `${ALBUMS_ROOT}/${newName}`;
+    if (albumHasShares(fromRel)) {
+      throw new AppError('Disable this album\u2019s client link before renaming it', 409);
+    }
+    if (newName === albumName) return { name: albumName, path: fromRel };
+    const fromAbs = safeResolve(fromRel);
+    const toAbs = safeResolve(toRel);
+    const stat = await fs.stat(fromAbs).catch(() => {
+      throw new AppError('Album not found', 404);
+    });
+    if (!stat.isDirectory()) throw new AppError('Album not found', 404);
+    if (await fs.stat(toAbs).catch(() => null)) {
+      throw new AppError('An album with that name already exists', 409);
+    }
+    await fs.rename(fromAbs, toAbs);
+    await renameRatingPrefix(`${fromRel}/`, `${toRel}/`);
+    return { name: newName, path: toRel };
   },
 
   /** Existing albums (subfolders under the share's Albums/ root). */

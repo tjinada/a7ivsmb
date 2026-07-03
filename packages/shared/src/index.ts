@@ -79,6 +79,14 @@ export interface FtpErrorEvent {
   clientIp?: string;
 }
 
+/** A photo sitting in the share root instead of a dated folder (a failed
+ *  filing). Surfaced so the owner can re-file it from the Transfers screen. */
+export interface StrayFile {
+  name: string;
+  size: number;       // bytes
+  modified: number;   // epoch milliseconds
+}
+
 /** One received file, captured from an FTP STOR. */
 export interface TransferEvent {
   name: string;
