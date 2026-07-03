@@ -20,6 +20,7 @@ import { ShareManager } from './ShareManager';
 import { EditedUpload } from './EditedUpload';
 import { RenameAlbumDialog } from './RenameAlbumDialog';
 import { BackfillDialog } from './BackfillDialog';
+import { DeleteFolderDialog } from './DeleteFolderDialog';
 import { StarRating } from './StarRating';
 import { shareItems, downloadZip } from './download';
 
@@ -115,6 +116,7 @@ export function GalleryPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteAlbumOpen, setDeleteAlbumOpen] = useState(false);
   const [backfillOpen, setBackfillOpen] = useState(false);
+  const [deleteFolderOpen, setDeleteFolderOpen] = useState(false);
 
   const qc = useQueryClient();
   const isTimeline = view === 'timeline';
@@ -156,6 +158,12 @@ export function GalleryPage() {
   // Date backfill applies to dated capture folders, never to curated albums,
   // so it's offered in folders view anywhere outside the Albums/ tree.
   const canBackfill = !isTimeline && !path.startsWith('Albums');
+  // "Delete folder" is offered only inside a dated Home folder (its last
+  // segment is YYYY-MM-DD): a real FTP-received capture folder, never the
+  // root, the Albums tree, or an album's inner folders.
+  const lastSeg = path.split('/').pop() ?? '';
+  const isHomeDateFolder =
+    !isTimeline && path !== '' && !path.startsWith('Albums') && /^\d{4}-\d{2}-\d{2}$/.test(lastSeg);
 
   const activeQuery = isTimeline ? timelineQuery : browseQuery;
   const { isLoading, isError, isFetching } = activeQuery;
@@ -192,6 +200,7 @@ export function GalleryPage() {
     setRenameOpen(false);
     setDeleteAlbumOpen(false);
     setBackfillOpen(false);
+    setDeleteFolderOpen(false);
   }, [path]);
 
   // Switching view drops the current selection/menus (different item set).
@@ -278,6 +287,22 @@ export function GalleryPage() {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         'Could not delete the album';
+      window.alert(msg);
+    },
+  });
+
+  const deleteFolderMut = useMutation({
+    mutationFn: (p: string) => api.delete('/gallery/folder', { data: { path: p } }),
+    onSuccess: () => {
+      const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+      qc.invalidateQueries({ queryKey: ['gallery'] });
+      setDeleteFolderOpen(false);
+      setPath(parent);
+    },
+    onError: (err) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Could not delete the folder';
       window.alert(msg);
     },
   });
@@ -617,6 +642,19 @@ export function GalleryPage() {
                       >
                         <CalendarClock className="h-4 w-4 text-primary-500" />
                         Re-file by date&hellip;
+                      </button>
+                    )}
+                    {isHomeDateFolder && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          setDeleteFolderOpen(true);
+                        }}
+                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-red-400 transition hover:bg-red-500/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete folder&hellip;
                       </button>
                     )}
                   </div>
@@ -1039,6 +1077,16 @@ export function GalleryPage() {
           folderLabel={path === '' ? 'Home' : prettyDate(path.split('/').pop() ?? path, false)}
           onApplied={() => qc.invalidateQueries({ queryKey: ['gallery'] })}
           onClose={() => setBackfillOpen(false)}
+        />
+      )}
+
+      {deleteFolderOpen && isHomeDateFolder && (
+        <DeleteFolderDialog
+          folderName={lastSeg}
+          photoCount={allItems.length > 0 ? allItems.length : undefined}
+          busy={deleteFolderMut.isPending}
+          onConfirm={() => deleteFolderMut.mutate(path)}
+          onCancel={() => setDeleteFolderOpen(false)}
         />
       )}
     </div>

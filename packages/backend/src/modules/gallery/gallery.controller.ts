@@ -111,6 +111,18 @@ export const galleryController = {
     }
   },
 
+  /** Delete an entire folder (a Home date folder) and its contents. */
+  async deleteFolder(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = (req.body ?? {}) as { path?: unknown };
+      if (typeof body.path !== 'string') throw new AppError('path is required', 400);
+      const deleted = await galleryService.deleteFolder(body.path);
+      sendSuccess(res, { deleted });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async renameAlbum(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = (req.body ?? {}) as { newName?: unknown };

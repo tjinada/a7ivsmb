@@ -11,6 +11,9 @@ router.get('/albums', requireAuth, galleryController.albums);
 router.post('/albums', requireAuth, galleryController.createAlbum);
 router.post('/albums/:name/rename', requireAuth, galleryController.renameAlbum);
 router.delete('/albums/:name', requireAuth, galleryController.deleteAlbum);
+// Delete an entire folder (a Home date folder). Path rides in the body so a
+// slashed folder path isn't a route param.
+router.delete('/folder', requireAuth, galleryController.deleteFolder);
 // Date backfill: dry-run scan, then apply. Both take { path } in the body.
 router.post('/backfill/scan', requireAuth, galleryController.backfillScan);
 router.post('/backfill/apply', requireAuth, galleryController.backfillApply);

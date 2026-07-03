@@ -48,6 +48,15 @@ export function albumHasShares(albumPath: string): boolean {
   return Object.values(store.get()).some((s) => s.albumPath === albumPath);
 }
 
+/** True if any share's album sits at or under `rel` (blocks a folder delete
+ *  that would remove a shared album out from under a live client link). */
+export function anyShareUnder(rel: string): boolean {
+  const prefix = rel.endsWith('/') ? rel : `${rel}/`;
+  return Object.values(store.get()).some(
+    (s) => s.albumPath === rel || s.albumPath.startsWith(prefix),
+  );
+}
+
 export function getShareBySlug(slug: string): ShareRecord | null {
   return Object.values(store.get()).find((s) => s.slug === slug) ?? null;
 }

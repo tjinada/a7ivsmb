@@ -24,7 +24,7 @@ import {
   loadRatings, getRating, setRating, removeRating, removeRatingsByPrefix, renameRatingPrefix,
   renameRatingKey,
 } from './ratings.store.js';
-import { albumHasShares, loadShares } from '../shares/index.js';
+import { albumHasShares, loadShares, anyShareUnder } from '../shares/index.js';
 import { captureDate } from '../../utils/captureDate.js';
 
 // Browser-renderable raster formats. RAW formats are previewed via their
@@ -653,6 +653,53 @@ export const galleryService = {
     if (!stat.isDirectory()) throw new AppError('Album not found', 404);
     await fs.rm(albumAbs, { recursive: true, force: true });
     await removeRatingsByPrefix(`${albumRel}/`);
+  },
+
+  /**
+   * Delete an entire folder under the share (a Home date folder) and its
+   * contents, then prune the ratings keyed under it. Refuses the share root
+   * and the Albums/ tree (albums have their own delete), and refuses any
+   * folder that still contains a shared album. Returns the photo count removed.
+   */
+  async deleteFolder(rel: string): Promise<number> {
+    await loadRatings();
+    await loadShares();
+    const cleaned = (rel ?? '').trim();
+    if (!cleaned) throw new AppError('Cannot delete the library root', 400);
+    if (cleaned === ALBUMS_ROOT || cleaned.startsWith(`${ALBUMS_ROOT}/`)) {
+      throw new AppError('Use album delete for curated albums', 400);
+    }
+    const abs = safeResolve(cleaned);
+    const stat = await fs.stat(abs).catch(() => {
+      throw new AppError('Folder not found', 404);
+    });
+    if (!stat.isDirectory()) throw new AppError('Not a folder', 400);
+    if (anyShareUnder(cleaned)) {
+      throw new AppError('Disable the client link inside this folder first', 409);
+    }
+
+    // Count photos before removal (for the confirmation/toast).
+    const root = path.resolve(config.photosPath);
+    let count = 0;
+    const walk = async (dir: string): Promise<void> => {
+      let dirents: import('node:fs').Dirent[];
+      try {
+        dirents = await fs.readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of dirents) {
+        if (e.name.startsWith('.')) continue;
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) await walk(p);
+        else if (e.isFile() && kindOf(e.name)) count += 1;
+      }
+    };
+    await walk(abs);
+
+    await fs.rm(abs, { recursive: true, force: true });
+    await removeRatingsByPrefix(`${toPosix(path.relative(root, abs))}/`);
+    return count;
   },
 
   /**
