@@ -36,6 +36,17 @@ export function newSlug(): string {
   return randomBytes(9).toString('base64url');
 }
 
+/**
+ * True if `s` is a syntactically valid slug. Slugs are base64url tokens from
+ * newSlug(), so a real one is always [A-Za-z0-9_-]. Rejecting anything else at
+ * every entry point keeps hostile input (e.g. a "</script>" payload) from ever
+ * reaching the share-page renderer or a store lookup. The length bound is
+ * generous on purpose — real slugs are ~12 chars, but we don't hard-code that.
+ */
+export function isValidSlug(s: unknown): s is string {
+  return typeof s === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s);
+}
+
 /** Random internal id (also used as the preview folder name). */
 export function newId(): string {
   return randomBytes(8).toString('hex');

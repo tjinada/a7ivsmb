@@ -4,6 +4,7 @@ import { logger } from '../../utils/logger.js';
 export { ownerShareRoutes, publicShareRoutes } from './shares.routes.js';
 export { renderSharePage } from './sharePage.js';
 export { albumHasShares, loadShares } from './shares.store.js';
+export { isValidSlug } from './shares.auth.js';
 
 /** Load the shares map into memory at startup (best-effort). */
 export async function initShares(): Promise<void> {

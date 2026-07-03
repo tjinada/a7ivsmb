@@ -367,6 +367,14 @@ h2.sec{ font-size:15px; font-weight:600; color:var(--muted); margin:26px 0 10px;
 .lb-note{ text-align:center; color:#ff6b6b; font-size:13px; min-height:18px; margin:0 0 8px; }
 `;
 
+/** JSON-encode a value for safe embedding inside an inline <script>. Escaping
+ *  '<' to \u003c neutralizes a "</script>" (or "<!--"/"<script") breakout while
+ *  producing a string the JS parser reads identically. Defense-in-depth beside
+ *  the route-level slug validation. */
+function safeJsonForScript(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
 /** Render the full standalone client page for a share slug. */
 export function renderSharePage(slug: string): string {
   return `<!doctype html>
@@ -380,7 +388,7 @@ export function renderSharePage(slug: string): string {
 </head>
 <body>
 <div id="app"><div class="card center"><p class="muted">Loading…</p></div></div>
-<script>const SLUG=${JSON.stringify(slug)};</script>
+<script>const SLUG=${safeJsonForScript(slug)};</script>
 <script>${CLIENT_JS}</script>
 </body>
 </html>`;

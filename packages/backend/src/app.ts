@@ -13,7 +13,7 @@ import { logger } from './utils/logger.js';
 import { authRoutes } from './modules/auth/index.js';
 import { ftpRoutes, initFtp } from './modules/ftp/index.js';
 import { galleryRoutes } from './modules/gallery/index.js';
-import { ownerShareRoutes, publicShareRoutes, renderSharePage, initShares } from './modules/shares/index.js';
+import { ownerShareRoutes, publicShareRoutes, renderSharePage, initShares, isValidSlug } from './modules/shares/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,6 +52,12 @@ app.get('/api/health', (_req, res) => {
 // ── Public client-share surface (available on any host; password-gated) ──────
 app.use('/api/public/share', publicShareRoutes);
 app.get('/s/:slug', (req, res) => {
+  // Reject anything that isn't a syntactically valid slug BEFORE rendering, so
+  // hostile input (e.g. a "</script>" payload) never reaches the HTML template.
+  if (!isValidSlug(req.params.slug)) {
+    res.status(404).json({ status: 'error', message: 'Not found' });
+    return;
+  }
   res.set('Cache-Control', 'no-store');
   res.type('html').send(renderSharePage(req.params.slug));
 });
