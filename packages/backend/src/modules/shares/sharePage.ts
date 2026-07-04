@@ -393,3 +393,26 @@ export function renderSharePage(slug: string): string {
 </body>
 </html>`;
 }
+
+
+/** Static page for a link that no longer resolves to a share (revoked or never
+ *  existed — indistinguishable once the record is deleted). No JS, no slug
+ *  echo; same styling as the gate so it reads as part of the same product. */
+export function renderInactivePage(): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="robots" content="noindex, nofollow"/>
+<title>Link not active</title>
+<style>${PAGE_CSS}</style>
+</head>
+<body>
+<div id="app"><div class="card center">
+<h1>This link is no longer active</h1>
+<p class="muted">The gallery it pointed to has been closed. If you were expecting photos, contact the person who shared the link with you.</p>
+</div></div>
+</body>
+</html>`;
+}
