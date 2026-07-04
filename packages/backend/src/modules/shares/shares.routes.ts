@@ -21,6 +21,7 @@ function validSlug(req: Request, res: Response, next: NextFunction): void {
 const owner: Router = Router();
 owner.post('/', requireAuth, sharesController.create);
 owner.get('/', requireAuth, sharesController.list);
+owner.get('/progress/:progressId', requireAuth, sharesController.progress);
 owner.post('/:id/delivery', requireAuth, sharesController.enableDelivery);
 owner.post('/:id/refresh', requireAuth, sharesController.refresh);
 owner.delete('/:id', requireAuth, sharesController.revoke);

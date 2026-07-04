@@ -21,6 +21,7 @@ import {
   deleteShare,
 } from './shares.store.js';
 import { hashPassword, verifyPassword, newId, newSlug } from './shares.auth.js';
+import { progressStart, progressTick, progressEnd } from './shares.progress.js';
 
 const JPG_EXTS = new Set(['.jpg', '.jpeg']);
 const EDITED_DIR = 'Edited';
@@ -124,8 +125,10 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return results;
 }
 
-/** Regenerate the watermarked preview set for a share from its album's Edited/. */
-async function generatePreviews(id: string, albumPath: string): Promise<string[]> {
+/** Regenerate the watermarked preview set for a share from its album's Edited/.
+ *  When a progressId is supplied, done/total counts are published for the
+ *  owner UI to poll; the entry lives exactly as long as this function runs. */
+async function generatePreviews(id: string, albumPath: string, progressId?: string): Promise<string[]> {
   const items = await listEditedJpgs(albumPath);
   const dir = previewsDirFor(id);
   await fs.rm(dir, { recursive: true, force: true });
@@ -134,32 +137,39 @@ async function generatePreviews(id: string, albumPath: string): Promise<string[]
 
   const editedDir = path.join(safeAlbumDir(albumPath), EDITED_DIR);
   const { previewMaxEdge, previewQuality } = config.shares;
-
-  // Render previews concurrently across CPU cores (capped, since each full-res
-  // decode holds memory). Order is preserved; files sharp can't decode return
-  // null and are dropped, so the result reflects only previews that landed.
-  const concurrency = Math.max(1, Math.min(os.cpus().length, 4));
-  const results = await mapLimit(items, concurrency, async (name) => {
-    const src = path.join(editedDir, name);
-    const out = path.join(dir, previewNameFor(name));
-    try {
-      // Two passes: resize first to learn the preview's real dimensions, then
-      // composite a watermark drawn at exactly that size (the diagonal text
-      // scales with each photo's aspect ratio).
-      const resized = await sharp(src, { failOn: 'none' })
-        .rotate()
-        .resize({ width: previewMaxEdge, height: previewMaxEdge, fit: 'inside', withoutEnlargement: true })
-        .toBuffer({ resolveWithObject: true });
-      await sharp(resized.data)
-        .composite([{ input: watermarkSvg(resized.info.width, resized.info.height) }])
-        .webp({ quality: previewQuality })
-        .toFile(out);
-      return name;
-    } catch {
-      return null; // sharp couldn't decode it; it just won't appear as a preview
-    }
-  });
-  return results.filter((n): n is string => n !== null);
+  if (progressId) progressStart(progressId, items.length);
+  try {
+    // Render previews concurrently across CPU cores (capped, since each
+    // full-res decode holds memory). Order is preserved; files sharp can't
+    // decode return null and are dropped, so the result reflects only
+    // previews that landed.
+    const concurrency = Math.max(1, Math.min(os.cpus().length, 4));
+    const results = await mapLimit(items, concurrency, async (name) => {
+      const src = path.join(editedDir, name);
+      const out = path.join(dir, previewNameFor(name));
+      try {
+        // Two passes: resize first to learn the preview's real dimensions,
+        // then composite a watermark drawn at exactly that size (the diagonal
+        // text scales with each photo's aspect ratio).
+        const resized = await sharp(src, { failOn: 'none' })
+          .rotate()
+          .resize({ width: previewMaxEdge, height: previewMaxEdge, fit: 'inside', withoutEnlargement: true })
+          .toBuffer({ resolveWithObject: true });
+        await sharp(resized.data)
+          .composite([{ input: watermarkSvg(resized.info.width, resized.info.height) }])
+          .webp({ quality: previewQuality })
+          .toFile(out);
+        return name;
+      } catch {
+        return null; // sharp couldn't decode it; it just won't appear as a preview
+      } finally {
+        if (progressId) progressTick(progressId); // counts processed, not just succeeded
+      }
+    });
+    return results.filter((n): n is string => n !== null);
+  } finally {
+    if (progressId) progressEnd(progressId);
+  }
 }
 
 /** Project a record to its owner-facing summary (drops the password hash). */
@@ -202,7 +212,7 @@ function toPublicState(rec: ShareRecord): SharePublicState {
 
 export const sharesService = {
   /** Create a share from an album's Edited/ JPGs. Generates the previews now. */
-  async create(albumPath: string, cap: number, password: string): Promise<ShareCreateResult> {
+  async create(albumPath: string, cap: number, password: string, progressId?: string): Promise<ShareCreateResult> {
     await loadShares();
     if (typeof albumPath !== 'string' || !albumPath.startsWith('Albums/')) {
       throw new AppError('A valid album path is required', 400);
@@ -220,7 +230,7 @@ export const sharesService = {
     }
 
     const id = newId();
-    const items = await generatePreviews(id, albumPath);
+    const items = await generatePreviews(id, albumPath, progressId);
     if (items.length === 0) throw new AppError('Could not generate any previews', 500);
 
     const { salt, hash } = await hashPassword(password);
@@ -263,11 +273,11 @@ export const sharesService = {
 
   /** Rebuild previews from the album's current Edited/ contents. Selections
    *  that no longer exist are pruned; phase is left unchanged. */
-  async refresh(id: string): Promise<ShareSummary> {
+  async refresh(id: string, progressId?: string): Promise<ShareSummary> {
     await loadShares();
     const rec = getShareById(id);
     if (!rec) throw new AppError('Share not found', 404);
-    const items = await generatePreviews(rec.id, rec.albumPath);
+    const items = await generatePreviews(rec.id, rec.albumPath, progressId);
     if (items.length === 0) throw new AppError('No edited JPGs to publish', 400);
     const keep = new Set(items);
     const next: ShareRecord = {

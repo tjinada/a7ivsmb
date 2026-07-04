@@ -4,6 +4,7 @@ import { Loader2, Share2, Copy, Check, RefreshCw, Send, Trash2, X } from 'lucide
 import type { ApiResponse, ShareSummary, SharePhase } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from './AuthImage';
+import { newProgressId, useShareProgress } from './useShareProgress';
 
 async function fetchShares(): Promise<ShareSummary[]> {
   const res = await api.get<ApiResponse<ShareSummary[]>>('/gallery/shares');
@@ -39,10 +40,12 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
     onError: () => window.alert('Could not send the final photos'),
   });
   const refreshMut = useMutation({
-    mutationFn: (id: string) => api.post(`/gallery/shares/${id}/refresh`),
+    mutationFn: ({ id, pid }: { id: string; pid: string }) =>
+      api.post(`/gallery/shares/${id}/refresh`, { progressId: pid }),
     onSuccess: invalidate,
     onError: () => window.alert('Could not refresh previews'),
   });
+  const refreshProgress = useShareProgress(refreshMut.variables?.pid ?? null, refreshMut.isPending).data;
   const revokeMut = useMutation({
     mutationFn: (id: string) => api.delete(`/gallery/shares/${id}`),
     onSuccess: invalidate,
@@ -113,7 +116,7 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
               {shares.map((s) => {
                 const busy =
                   (deliveryMut.isPending && deliveryMut.variables === s.id) ||
-                  (refreshMut.isPending && refreshMut.variables === s.id) ||
+                  (refreshMut.isPending && refreshMut.variables?.id === s.id) ||
                   (revokeMut.isPending && revokeMut.variables === s.id);
                 return (
                   <div key={s.id} className="rounded-xl border border-border bg-base p-3">
@@ -192,12 +195,12 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
 
                       <button
                         type="button"
-                        onClick={() => refreshMut.mutate(s.id)}
+                        onClick={() => refreshMut.mutate({ id: s.id, pid: newProgressId() })}
                         disabled={busy}
                         className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-gray-200 transition hover:bg-surface disabled:opacity-50"
                         title="Refresh previews from the album's current Edited/ folder"
                       >
-                        <RefreshCw className={`h-3.5 w-3.5 ${refreshMut.isPending && refreshMut.variables === s.id ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`h-3.5 w-3.5 ${refreshMut.isPending && refreshMut.variables?.id === s.id ? 'animate-spin' : ''}`} />
                         Refresh previews
                       </button>
 
@@ -211,6 +214,27 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
                         Disable link
                       </button>
                     </div>
+
+                    {refreshMut.isPending && refreshMut.variables?.id === s.id && (
+                      <div className="mt-2.5">
+                        <p className="text-[11px] text-gray-500">
+                          {refreshProgress && refreshProgress.total > 0
+                            ? `Regenerating previews… ${refreshProgress.done} / ${refreshProgress.total}`
+                            : 'Preparing…'}
+                        </p>
+                        <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface">
+                          <div
+                            className="h-full rounded-full bg-primary-500 transition-[width] duration-300"
+                            style={{
+                              width:
+                                refreshProgress && refreshProgress.total > 0
+                                  ? `${Math.round((refreshProgress.done / refreshProgress.total) * 100)}%`
+                                  : '4%',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

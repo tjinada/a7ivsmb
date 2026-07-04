@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Share2, Copy, Check, ExternalLink } from 'lucide-react';
 import type { ApiResponse, ShareCreateResult } from '@sonycam/shared';
 import { api } from '@/api/client';
+import { newProgressId, useShareProgress } from './useShareProgress';
 
 /**
  * Create a password-protected client proofing link from an album. The link
@@ -24,13 +25,15 @@ export function ShareDialog({
   const [password, setPassword] = useState('');
   const [created, setCreated] = useState<ShareCreateResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [progressId, setProgressId] = useState<string | null>(null);
 
   const createMut = useMutation({
-    mutationFn: async (): Promise<ShareCreateResult> => {
+    mutationFn: async (pid: string): Promise<ShareCreateResult> => {
       const res = await api.post<ApiResponse<ShareCreateResult>>('/gallery/shares', {
         albumPath,
         cap,
         password,
+        progressId: pid,
       });
       if (!res.data.data) throw new Error('Unexpected response');
       return res.data.data;
@@ -40,6 +43,8 @@ export function ShareDialog({
       qc.invalidateQueries({ queryKey: ['shares'] });
     },
   });
+
+  const progress = useShareProgress(progressId, createMut.isPending).data;
 
   const copyLink = async () => {
     if (!created) return;
@@ -108,6 +113,27 @@ export function ShareDialog({
 
             {errorMsg && <p className="mt-3 text-sm text-red-400">{errorMsg}</p>}
 
+            {createMut.isPending && (
+              <div className="mt-4">
+                <p className="text-xs text-gray-400">
+                  {progress && progress.total > 0
+                    ? `Generating previews… ${progress.done} / ${progress.total}`
+                    : 'Preparing…'}
+                </p>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-base">
+                  <div
+                    className="h-full rounded-full bg-primary-500 transition-[width] duration-300"
+                    style={{
+                      width:
+                        progress && progress.total > 0
+                          ? `${Math.round((progress.done / progress.total) * 100)}%`
+                          : '4%',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="mt-5 flex gap-2">
               <button
                 type="button"
@@ -119,7 +145,11 @@ export function ShareDialog({
               </button>
               <button
                 type="button"
-                onClick={() => createMut.mutate()}
+                onClick={() => {
+                  const pid = newProgressId();
+                  setProgressId(pid);
+                  createMut.mutate(pid);
+                }}
                 disabled={!canCreate}
                 className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 py-2 text-sm font-medium text-white transition hover:bg-primary-500 disabled:opacity-40"
               >

@@ -225,6 +225,14 @@ export interface ShareSummary {
 /** Result of POST /api/gallery/shares (create). Same shape as a summary. */
 export type ShareCreateResult = ShareSummary;
 
+/** Preview-generation progress for a share create/refresh, returned by
+ *  GET /api/gallery/shares/progress/:progressId. { done: 0, total: 0 } means
+ *  the id is unknown (not started yet, finished, or expired). */
+export interface ShareProgress {
+  done: number;
+  total: number;
+}
+
 /** One previewable image in the client proofing view. */
 export interface SharePublicItem {
   file: string;             // original edited filename; id for select/download

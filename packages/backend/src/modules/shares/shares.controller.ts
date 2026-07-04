@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import archiver from 'archiver';
 import { sharesService } from './shares.service.js';
+import { isValidProgressId, progressGet } from './shares.progress.js';
 import { setShareCookie } from './shares.auth.js';
 import { sendSuccess } from '../../utils/response.js';
 import { AppError } from '../../middleware/index.js';
@@ -15,11 +16,12 @@ export const sharesController = {
 
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const body = (req.body ?? {}) as { albumPath?: unknown; cap?: unknown; password?: unknown };
+      const body = (req.body ?? {}) as { albumPath?: unknown; cap?: unknown; password?: unknown; progressId?: unknown };
       if (typeof body.albumPath !== 'string') throw new AppError('albumPath is required', 400);
       if (typeof body.cap !== 'number' || !Number.isFinite(body.cap)) throw new AppError('cap must be a number', 400);
       if (typeof body.password !== 'string') throw new AppError('password is required', 400);
-      sendSuccess(res, await sharesService.create(body.albumPath, body.cap, body.password), 201);
+      const progressId = isValidProgressId(body.progressId) ? body.progressId : undefined;
+      sendSuccess(res, await sharesService.create(body.albumPath, body.cap, body.password, progressId), 201);
     } catch (err) {
       next(err);
     }
@@ -43,7 +45,20 @@ export const sharesController = {
 
   async refresh(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      sendSuccess(res, await sharesService.refresh(req.params.id));
+      const body = (req.body ?? {}) as { progressId?: unknown };
+      const progressId = isValidProgressId(body.progressId) ? body.progressId : undefined;
+      sendSuccess(res, await sharesService.refresh(req.params.id, progressId));
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /** Poll preview-generation progress for a pending create/refresh. */
+  async progress(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      noStore(res);
+      if (!isValidProgressId(req.params.progressId)) throw new AppError('Not found', 404);
+      sendSuccess(res, progressGet(req.params.progressId));
     } catch (err) {
       next(err);
     }
