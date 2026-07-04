@@ -82,27 +82,25 @@ function escapeXml(s: string): string {
 }
 
 /**
- * A small "Preview" pill, rendered as an SVG and composited bottom-right with
- * baked-in margin (the transparent right/bottom area insets it from the corner
- * once placed with gravity 'southeast'). Uses a generic sans-serif so it works
- * with whatever font is present (DejaVu in the Alpine image, Arial on Windows).
+ * Full-frame diagonal watermark, sized to the preview's actual dimensions and
+ * composited over the centre. The text spans ~65% of the image width at -30°,
+ * faint white with a soft dark stroke so it reads on both bright and dark
+ * photos. Uses a generic sans-serif so it works with whatever font is present
+ * (DejaVu in the Alpine image, Arial on Windows).
  */
-function watermarkSvg(): Buffer {
+function watermarkSvg(width: number, height: number): Buffer {
   const text = config.shares.watermarkText;
-  const fontSize = 30;
-  const padX = 18;
-  const padY = 12;
-  const pillW = Math.ceil(text.length * fontSize * 0.6) + padX * 2;
-  const pillH = fontSize + padY * 2;
-  const marginR = 28;
-  const marginB = 24;
-  const w = pillW + marginR;
-  const h = pillH + marginB;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-  <rect x="0" y="0" width="${pillW}" height="${pillH}" rx="8" ry="8" fill="#000" fill-opacity="0.45"/>
-  <text x="${pillW / 2}" y="${pillH / 2}" font-family="sans-serif" font-size="${fontSize}"
-        font-weight="600" fill="#fff" fill-opacity="0.92" text-anchor="middle"
-        dominant-baseline="central">${escapeXml(text)}</text>
+  // Approximate sans-serif advance of ~0.6em per glyph: choose the font size
+  // that makes the text span ~65% of the image width.
+  const fontSize = Math.max(24, Math.round((width * 0.65) / (Math.max(text.length, 1) * 0.6)));
+  const cx = width / 2;
+  const cy = height / 2;
+  const stroke = Math.max(1, Math.round(fontSize / 40));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+  <text x="${cx}" y="${cy}" font-family="sans-serif" font-size="${fontSize}" font-weight="700"
+        fill="#fff" fill-opacity="0.2" stroke="#000" stroke-opacity="0.15" stroke-width="${stroke}"
+        text-anchor="middle" dominant-baseline="central"
+        transform="rotate(-30 ${cx} ${cy})">${escapeXml(text)}</text>
 </svg>`;
   return Buffer.from(svg);
 }
@@ -135,7 +133,6 @@ async function generatePreviews(id: string, albumPath: string): Promise<string[]
   if (items.length === 0) return items;
 
   const editedDir = path.join(safeAlbumDir(albumPath), EDITED_DIR);
-  const mark = watermarkSvg();
   const { previewMaxEdge, previewQuality } = config.shares;
 
   // Render previews concurrently across CPU cores (capped, since each full-res
@@ -146,10 +143,15 @@ async function generatePreviews(id: string, albumPath: string): Promise<string[]
     const src = path.join(editedDir, name);
     const out = path.join(dir, previewNameFor(name));
     try {
-      await sharp(src, { failOn: 'none' })
+      // Two passes: resize first to learn the preview's real dimensions, then
+      // composite a watermark drawn at exactly that size (the diagonal text
+      // scales with each photo's aspect ratio).
+      const resized = await sharp(src, { failOn: 'none' })
         .rotate()
         .resize({ width: previewMaxEdge, height: previewMaxEdge, fit: 'inside', withoutEnlargement: true })
-        .composite([{ input: mark, gravity: 'southeast' }])
+        .toBuffer({ resolveWithObject: true });
+      await sharp(resized.data)
+        .composite([{ input: watermarkSvg(resized.info.width, resized.info.height) }])
         .webp({ quality: previewQuality })
         .toFile(out);
       return name;

@@ -10,6 +10,13 @@ let state = null;
 const sel = new Set();
 const $ = (id) => document.getElementById(id);
 
+// Save-as deterrent (friction, not protection): no right-click menu or drag on
+// photos. The iOS long-press "Save Image" sheet is suppressed by the CSS
+// -webkit-touch-callout rule. Delegated on document so it covers every img the
+// views create later.
+document.addEventListener('contextmenu', (ev) => { if(ev.target && ev.target.tagName === 'IMG') ev.preventDefault(); });
+document.addEventListener('dragstart', (ev) => { if(ev.target && ev.target.tagName === 'IMG') ev.preventDefault(); });
+
 function escapeHtml(s){
   return String(s).replace(/[&<>"]/g, (c) =>
     c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;');
@@ -365,6 +372,7 @@ h2.sec{ font-size:15px; font-weight:600; color:var(--muted); margin:26px 0 10px;
 .lb-bottom{ padding:12px 14px calc(14px + env(safe-area-inset-bottom)); }
 .lb-bottom .btn{ width:100%; max-width:420px; margin:0 auto; display:block; }
 .lb-note{ text-align:center; color:#ff6b6b; font-size:13px; min-height:18px; margin:0 0 8px; }
+img{ -webkit-user-select:none; user-select:none; -webkit-user-drag:none; -webkit-touch-callout:none; }
 `;
 
 /** JSON-encode a value for safe embedding inside an inline <script>. Escaping
