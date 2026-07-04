@@ -4,6 +4,7 @@ import { FtpSrv, type FtpSrvOptions } from 'ftp-srv';
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
 import { captureDate } from '../../utils/captureDate.js';
+import { mkdirShared, relaxSharePerms } from '../../utils/shareFs.js';
 import { getFtpConfig } from './ftp.config.js';
 import type { FtpStatus, TransferEvent, FtpErrorEvent, StrayFile } from '@sonycam/shared';
 
@@ -56,7 +57,7 @@ async function fileIntoFolder(abs: string): Promise<string> {
   const destDir = path.join(config.photosPath, day, bucketFor(name));
   const dest = path.join(destDir, name);
   if (dest === abs) return abs;
-  await fs.mkdir(destDir, { recursive: true });
+  await mkdirShared(destDir);
   try {
     await fs.rename(abs, dest);
   } catch {
@@ -67,6 +68,7 @@ async function fileIntoFolder(abs: string): Promise<string> {
     await fs.unlink(abs);
     logger.info(`copied ${name} across devices`, 'FTP');
   }
+  await relaxSharePerms(dest, false);
   return dest;
 }
 
@@ -114,7 +116,7 @@ async function ensurePhotosDir(): Promise<void> {
     .then((s) => s.isDirectory())
     .catch(() => false);
   if (isDir) return;
-  await fs.mkdir(config.photosPath, { recursive: true });
+  await mkdirShared(config.photosPath);
 }
 
 /**

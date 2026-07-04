@@ -26,6 +26,7 @@ import {
 } from './ratings.store.js';
 import { albumHasShares, loadShares, anyShareUnder } from '../shares/index.js';
 import { captureDate } from '../../utils/captureDate.js';
+import { mkdirShared, relaxSharePerms } from '../../utils/shareFs.js';
 
 // Browser-renderable raster formats. RAW formats are previewed via their
 // embedded JPEG (see render/extractRawPreview). Anything else is hidden.
@@ -782,7 +783,7 @@ export const galleryService = {
         continue;
       }
       try {
-        await fs.mkdir(path.dirname(toAbs), { recursive: true });
+        await mkdirShared(path.dirname(toAbs));
         try {
           await fs.rename(fromAbs, toAbs);
         } catch {
@@ -790,6 +791,7 @@ export const galleryService = {
           await fs.copyFile(fromAbs, toAbs);
           await fs.unlink(fromAbs);
         }
+        await relaxSharePerms(toAbs, false);
         await renameRatingKey(toPosix(path.relative(root, fromAbs)), toPosix(path.relative(root, toAbs)));
         touchedDirs.add(path.dirname(fromAbs));
         moved += 1;
@@ -838,9 +840,9 @@ export const galleryService = {
 
     const selJpgAbs = path.join(albumAbs, 'Selected', 'JPG');
     const selRawAbs = path.join(albumAbs, 'Selected', 'RAW');
-    await fs.mkdir(selJpgAbs, { recursive: true });
-    await fs.mkdir(selRawAbs, { recursive: true });
-    await fs.mkdir(path.join(albumAbs, 'Edited'), { recursive: true });
+    await mkdirShared(selJpgAbs);
+    await mkdirShared(selRawAbs);
+    await mkdirShared(path.join(albumAbs, 'Edited'));
 
     const relOf = (abs: string) => toPosix(path.relative(root, abs));
     const consumed = new Set<string>();
@@ -883,6 +885,7 @@ export const galleryService = {
       if (jpgAbs) {
         const dest = path.join(selJpgAbs, base + jpgExt);
         await fs.copyFile(jpgAbs, dest);
+        await relaxSharePerms(dest, false);
         const r = getRating(relOf(jpgAbs));
         if (r > 0) await setRating(relOf(dest), r);
         copied += 1;
@@ -890,6 +893,7 @@ export const galleryService = {
       if (rawAbs) {
         const dest = path.join(selRawAbs, base + rawExt);
         await fs.copyFile(rawAbs, dest);
+        await relaxSharePerms(dest, false);
         const r = getRating(relOf(rawAbs));
         if (r > 0) await setRating(relOf(dest), r);
         copied += 1;
@@ -925,12 +929,13 @@ export const galleryService = {
     if (!albumStat.isDirectory()) throw new AppError('Album not found', 404);
 
     const editedAbs = path.join(albumAbs, 'Edited');
-    await fs.mkdir(editedAbs, { recursive: true });
+    await mkdirShared(editedAbs);
 
     const destAbs = path.join(editedAbs, filename);
     const tmp = `${destAbs}.tmp-${Date.now()}`;
     await fs.writeFile(tmp, data);
     await fs.rename(tmp, destAbs);
+    await relaxSharePerms(destAbs, false);
     return { name: filename, size: data.length };
   },
 
