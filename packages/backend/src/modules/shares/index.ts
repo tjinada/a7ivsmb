@@ -21,5 +21,5 @@ export async function initShares(): Promise<void> {
  *  active" page instead of the password gate. */
 export async function shareSlugExists(slug: string): Promise<boolean> {
   await loadShares();
-  return getShareBySlug(slug) !== undefined;
+  return getShareBySlug(slug) !== null;
 }
