@@ -23,6 +23,7 @@ import {
 } from './shares.store.js';
 import { hashPassword, verifyPassword, newId, newSlug } from './shares.auth.js';
 import { progressStart, progressTick, progressEnd } from './shares.progress.js';
+import { compareNames } from '../../utils/naturalOrder.js';
 
 const JPG_EXTS = new Set(['.jpg', '.jpeg']);
 const EDITED_DIR = 'Edited';
@@ -79,7 +80,7 @@ async function listEditedJpgs(albumPath: string): Promise<string[]> {
   return dirents
     .filter((d) => d.isFile() && !d.name.startsWith('.') && JPG_EXTS.has(path.extname(d.name).toLowerCase()))
     .map((d) => d.name)
-    .sort((a, b) => a.localeCompare(b));
+    .sort(compareNames);
 }
 
 /** Escape text for safe inclusion in an SVG. */

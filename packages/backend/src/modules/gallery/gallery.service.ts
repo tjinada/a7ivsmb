@@ -27,6 +27,7 @@ import {
 import { albumHasShares, loadShares, anyShareUnder } from '../shares/index.js';
 import { captureDate } from '../../utils/captureDate.js';
 import { mkdirShared, relaxSharePerms } from '../../utils/shareFs.js';
+import { compareNames } from '../../utils/naturalOrder.js';
 
 // Browser-renderable raster formats. RAW formats are previewed via their
 // embedded JPEG (see render/extractRawPreview). Anything else is hidden.
@@ -328,7 +329,7 @@ async function imageNamesIn(dir: string): Promise<string[]> {
   return dirents
     .filter((e) => e.isFile() && !e.name.startsWith('.') && kindOf(e.name) !== null)
     .map((e) => e.name)
-    .sort((a, b) => a.localeCompare(b));
+    .sort(compareNames);
 }
 
 /**
@@ -555,9 +556,14 @@ export const galleryService = {
       items.push({ path: relPath, name: e.name, size: s.size, modified: s.mtimeMs, kind, rating: getRating(relPath) });
     }
 
-    // Newest activity first, for both folders and photos.
+    // Newest activity first for folders. Photos inside curated albums read in
+    // natural filename order (the order they were named/exported); everything
+    // else (dated shoot folders) stays newest-first.
+    const relNorm = toPosix(path.relative(root, dir));
+    const inAlbums = relNorm === ALBUMS_ROOT || relNorm.startsWith(`${ALBUMS_ROOT}/`);
     folders.sort((a, b) => b.modified - a.modified);
-    items.sort((a, b) => b.modified - a.modified);
+    if (inAlbums) items.sort((a, b) => compareNames(a.name, b.name));
+    else items.sort((a, b) => b.modified - a.modified);
 
     // Pair each photo with its JPG/RAW twin (this folder + sibling bucket).
     const entries = items.map((it) => ({ relPath: it.path, kind: it.kind }));
@@ -578,7 +584,7 @@ export const galleryService = {
       }),
     );
 
-    const here = toPosix(path.relative(root, dir)); // '' at the root
+    const here = relNorm; // '' at the root
     const parent = here === '' ? null : path.posix.dirname(here) === '.' ? '' : path.posix.dirname(here);
 
     return { path: here, parent, folders, items };
