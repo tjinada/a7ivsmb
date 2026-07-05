@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Folder, ChevronRight, RefreshCw, Loader2, Images, Download, Home, Star, SlidersHorizontal,
@@ -100,7 +101,12 @@ const idleChip = 'flex items-center rounded-md px-2.5 py-1 text-xs text-gray-400
 
 export function GalleryPage() {
   const [view, setView] = useState<'folders' | 'timeline'>('folders');
-  const [path, setPath] = useState('');
+  // Folder path lives in the URL (?path=...) so every drill-down is a real
+  // history entry: Android's back gesture walks up folders instead of
+  // closing the PWA, and reloads keep the user in the same folder.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const path = searchParams.get('path') ?? '';
+  const setPath = (p: string) => setSearchParams(p ? { path: p } : {});
   const [active, setActive] = useState<GalleryItem | null>(null);
   const [ratingMin, setRatingMin] = useState(0);
   const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'raw'>('all');

@@ -6,6 +6,7 @@ import type { GalleryItem, ExifInfo, ApiResponse } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { saveImage } from './download';
 import { StarRating } from './StarRating';
+import { useHistoryDismiss } from './useHistoryDismiss';
 import { toast } from '@/components/Toast';
 
 /**
@@ -37,6 +38,10 @@ export function Lightbox({
   const [showInfo, setShowInfo] = useState(false);
   const [exif, setExif] = useState<ExifInfo | null>(null);
   const [exifLoading, setExifLoading] = useState(false);
+
+  // Android/browser back gesture closes the lightbox instead of the app.
+  // One history entry per lightbox session (prev/next don't add more).
+  useHistoryDismiss(true, onClose);
 
   // The preview loads as a plain <img> (the media cookie authorizes it), so iOS
   // long-press shares the real image and the browser can cache it.
