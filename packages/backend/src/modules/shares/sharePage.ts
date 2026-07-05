@@ -284,7 +284,9 @@ function renderSubmitted(){
 }
 
 function renderDelivery(){
-  const picked = state.items.filter((it) => it.selected);
+  // A download-everything share has no selections: every published photo is
+  // downloadable. A proofing share delivers only the client's picks.
+  const picked = state.kind === 'delivery' ? state.items : state.items.filter((it) => it.selected);
   const files = picked.map((it) => it.file);
   $('app').innerHTML =
     '<div class="bar"><div><strong>' + escapeHtml(state.albumName) + '</strong>'

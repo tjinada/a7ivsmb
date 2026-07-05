@@ -1,5 +1,5 @@
 import { JsonStore } from '../../store/jsonStore.js';
-import type { SharePhase } from '@sonycam/shared';
+import type { SharePhase, ShareKind } from '@sonycam/shared';
 
 /**
  * Server-side record for one client share. Includes the password hash, so this
@@ -12,7 +12,8 @@ export interface ShareRecord {
   slug: string;             // public URL token
   albumName: string;
   albumPath: string;        // share-relative, e.g. "Albums/June Wedding"
-  cap: number;              // max selections
+  cap: number;              // max selections (0 for delivery kind)
+  kind?: ShareKind;         // absent in pre-kind records; read as 'proofing'
   passwordSalt: string;     // hex (scrypt)
   passwordHash: string;     // hex (scrypt)
   phase: SharePhase;

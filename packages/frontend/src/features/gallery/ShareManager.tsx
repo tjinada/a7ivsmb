@@ -122,12 +122,13 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
                   <div key={s.id} className="rounded-xl border border-border bg-base p-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-gray-100">{s.albumName}</p>
-                      <span className={`mt-1.5 inline-block rounded-md px-2 py-0.5 text-[11px] font-medium ${PHASE_CLASS[s.phase]}`}>
-                        {PHASE_LABEL[s.phase]}
+                      <span className={`mt-1.5 inline-block rounded-md px-2 py-0.5 text-[11px] font-medium ${s.kind === 'delivery' ? 'bg-sky-500/15 text-sky-300' : PHASE_CLASS[s.phase]}`}>
+                        {s.kind === 'delivery' ? 'Download-all link' : PHASE_LABEL[s.phase]}
                       </span>
                       <p className="mt-1.5 text-[11px] text-gray-500">
-                        {s.selectedCount} / {s.cap} selected &middot; {s.previewCount} preview
-                        {s.previewCount === 1 ? '' : 's'}
+                        {s.kind === 'delivery'
+                          ? <>{s.previewCount} photo{s.previewCount === 1 ? '' : 's'} &middot; client can download everything</>
+                          : <>{s.selectedCount} / {s.cap} selected &middot; {s.previewCount} preview{s.previewCount === 1 ? '' : 's'}</>}
                       </p>
 
                       {s.phase !== 'proofing' && s.selections.length > 0 && (

@@ -206,13 +206,22 @@ export interface GalleryBrowseResult {
  */
 export type SharePhase = 'proofing' | 'submitted' | 'delivery';
 
+/**
+ * What kind of share this is:
+ *   proofing – the classic pick-and-submit flow (cap, selections, phases)
+ *   delivery – download-everything: born in the delivery phase, no cap or
+ *              selections; the client may download any published photo.
+ */
+export type ShareKind = 'proofing' | 'delivery';
+
 /** Owner-facing summary of one share (no secrets). */
 export interface ShareSummary {
   id: string;
   slug: string;             // public URL token
   albumName: string;
   albumPath: string;        // share-relative, e.g. "Albums/June Wedding"
-  cap: number;              // max selections the client may make
+  cap: number;              // max selections the client may make (0 for delivery kind)
+  kind: ShareKind;
   phase: SharePhase;
   previewCount: number;     // edited JPGs published as previews
   selectedCount: number;
@@ -243,6 +252,7 @@ export interface SharePublicItem {
  *  Carries nothing about other shares and no secrets. */
 export interface SharePublicState {
   albumName: string;
+  kind: ShareKind;
   phase: SharePhase;
   cap: number;
   selectedCount: number;

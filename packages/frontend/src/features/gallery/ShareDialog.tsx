@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Share2, Copy, Check, ExternalLink } from 'lucide-react';
-import type { ApiResponse, ShareCreateResult } from '@sonycam/shared';
+import type { ApiResponse, ShareCreateResult, ShareKind } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { newProgressId, useShareProgress } from './useShareProgress';
 
@@ -21,6 +21,7 @@ export function ShareDialog({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const [kind, setKind] = useState<ShareKind>('proofing');
   const [cap, setCap] = useState(30);
   const [password, setPassword] = useState('');
   const [created, setCreated] = useState<ShareCreateResult | null>(null);
@@ -34,6 +35,7 @@ export function ShareDialog({
         cap,
         password,
         progressId: pid,
+        kind,
       });
       if (!res.data.data) throw new Error('Unexpected response');
       return res.data.data;
@@ -58,7 +60,7 @@ export function ShareDialog({
   };
 
   const capValid = Number.isFinite(cap) && cap >= 1 && cap <= 1000;
-  const canCreate = capValid && password.trim().length >= 4 && !createMut.isPending;
+  const canCreate = (kind === 'delivery' || capValid) && password.trim().length >= 4 && !createMut.isPending;
   const errorMsg =
     createMut.error instanceof Error
       ? ((createMut.error as { response?: { data?: { message?: string } } }).response?.data?.message ??
@@ -82,22 +84,56 @@ export function ShareDialog({
         {!created ? (
           <>
             <p className="mt-1 text-sm text-gray-400">
-              Creates a private link for <span className="text-gray-300">{albumName}</span>. Your client sees
-              watermarked previews of the <span className="text-gray-300">Edited</span> photos and picks their
-              favourites.
+              {kind === 'proofing' ? (
+                <>
+                  Creates a private link for <span className="text-gray-300">{albumName}</span>. Your client sees
+                  watermarked previews of the <span className="text-gray-300">Edited</span> photos and picks their
+                  favourites.
+                </>
+              ) : (
+                <>
+                  Creates a private link for <span className="text-gray-300">{albumName}</span>. Your client can
+                  view and download every <span className="text-gray-300">Edited</span> photo right away — no
+                  picking, no watermarks.
+                </>
+              )}
             </p>
 
             <p className="mb-1.5 mt-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-              Max selections
+              Share type
             </p>
-            <input
-              type="number"
-              min={1}
-              max={1000}
-              value={Number.isFinite(cap) ? cap : ''}
-              onChange={(e) => setCap(parseInt(e.target.value, 10))}
-              className="w-full rounded-lg border border-border bg-base px-3 py-2 text-sm text-gray-100 outline-none focus:border-primary-500"
-            />
+            <div className="flex overflow-hidden rounded-lg border border-border">
+              <button
+                type="button"
+                onClick={() => setKind('proofing')}
+                className={`flex-1 py-2 text-sm transition ${kind === 'proofing' ? 'bg-primary-600 font-medium text-white' : 'bg-base text-gray-300 hover:bg-border'}`}
+              >
+                Client picks
+              </button>
+              <button
+                type="button"
+                onClick={() => setKind('delivery')}
+                className={`flex-1 py-2 text-sm transition ${kind === 'delivery' ? 'bg-primary-600 font-medium text-white' : 'bg-base text-gray-300 hover:bg-border'}`}
+              >
+                Download all
+              </button>
+            </div>
+
+            {kind === 'proofing' && (
+              <>
+                <p className="mb-1.5 mt-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                  Max selections
+                </p>
+                <input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={Number.isFinite(cap) ? cap : ''}
+                  onChange={(e) => setCap(parseInt(e.target.value, 10))}
+                  className="w-full rounded-lg border border-border bg-base px-3 py-2 text-sm text-gray-100 outline-none focus:border-primary-500"
+                />
+              </>
+            )}
 
             <p className="mb-1.5 mt-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
               Password <span className="normal-case text-gray-600">(give this to your client)</span>
@@ -161,7 +197,9 @@ export function ShareDialog({
         ) : (
           <>
             <p className="mt-1 text-sm text-gray-400">
-              Send your client the link and the password. They can start choosing right away.
+              {created.kind === 'delivery'
+                ? 'Send your client the link and the password. They can download everything right away.'
+                : 'Send your client the link and the password. They can start choosing right away.'}
             </p>
 
             <div className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-base p-2">

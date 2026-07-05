@@ -10,6 +10,7 @@ import type {
   ShareCreateResult,
   SharePublicState,
   SharePublicItem,
+  ShareKind,
 } from '@sonycam/shared';
 import {
   type ShareRecord,
@@ -25,6 +26,11 @@ import { progressStart, progressTick, progressEnd } from './shares.progress.js';
 
 const JPG_EXTS = new Set(['.jpg', '.jpeg']);
 const EDITED_DIR = 'Edited';
+
+/** A record's kind; pre-kind records on disk are proofing shares. */
+function kindOf(rec: ShareRecord): ShareKind {
+  return rec.kind ?? 'proofing';
+}
 
 /** Absolute path to a share's preview folder on disk. */
 function previewsDirFor(id: string): string {
@@ -128,7 +134,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 /** Regenerate the watermarked preview set for a share from its album's Edited/.
  *  When a progressId is supplied, done/total counts are published for the
  *  owner UI to poll; the entry lives exactly as long as this function runs. */
-async function generatePreviews(id: string, albumPath: string, progressId?: string): Promise<string[]> {
+async function generatePreviews(id: string, albumPath: string, progressId?: string, watermark = true): Promise<string[]> {
   const items = await listEditedJpgs(albumPath);
   const dir = previewsDirFor(id);
   await fs.rm(dir, { recursive: true, force: true });
@@ -156,7 +162,7 @@ async function generatePreviews(id: string, albumPath: string, progressId?: stri
           .resize({ width: previewMaxEdge, height: previewMaxEdge, fit: 'inside', withoutEnlargement: true })
           .toBuffer({ resolveWithObject: true });
         await sharp(resized.data)
-          .composite([{ input: watermarkSvg(resized.info.width, resized.info.height) }])
+          .composite(watermark ? [{ input: watermarkSvg(resized.info.width, resized.info.height) }] : [])
           .webp({ quality: previewQuality })
           .toFile(out);
         return name;
@@ -180,6 +186,7 @@ function toSummary(rec: ShareRecord): ShareSummary {
     albumName: rec.albumName,
     albumPath: rec.albumPath,
     cap: rec.cap,
+    kind: kindOf(rec),
     phase: rec.phase,
     previewCount: rec.items.length,
     selectedCount: rec.selections.length,
@@ -203,6 +210,7 @@ function toPublicState(rec: ShareRecord): SharePublicState {
   const items: SharePublicItem[] = rec.items.map((file) => ({ file, selected: picked.has(file) }));
   return {
     albumName: rec.albumName,
+    kind: kindOf(rec),
     phase: rec.phase,
     cap: rec.cap,
     selectedCount: rec.selections.length,
@@ -211,13 +219,16 @@ function toPublicState(rec: ShareRecord): SharePublicState {
 }
 
 export const sharesService = {
-  /** Create a share from an album's Edited/ JPGs. Generates the previews now. */
-  async create(albumPath: string, cap: number, password: string, progressId?: string): Promise<ShareCreateResult> {
+  /** Create a share from an album's Edited/ JPGs. Generates the previews now.
+   *  A 'proofing' share starts the pick-and-submit flow; a 'delivery' share is
+   *  born downloadable (no cap, unwatermarked previews). */
+  async create(albumPath: string, cap: number, password: string, progressId?: string, kind: ShareKind = 'proofing'): Promise<ShareCreateResult> {
     await loadShares();
     if (typeof albumPath !== 'string' || !albumPath.startsWith('Albums/')) {
       throw new AppError('A valid album path is required', 400);
     }
-    if (!Number.isFinite(cap) || cap < 1 || cap > 1000) {
+    const isDelivery = kind === 'delivery';
+    if (!isDelivery && (!Number.isFinite(cap) || cap < 1 || cap > 1000)) {
       throw new AppError('cap must be between 1 and 1000', 400);
     }
     if (typeof password !== 'string' || password.length < 4) {
@@ -230,7 +241,7 @@ export const sharesService = {
     }
 
     const id = newId();
-    const items = await generatePreviews(id, albumPath, progressId);
+    const items = await generatePreviews(id, albumPath, progressId, !isDelivery);
     if (items.length === 0) throw new AppError('Could not generate any previews', 500);
 
     const { salt, hash } = await hashPassword(password);
@@ -239,10 +250,11 @@ export const sharesService = {
       slug: newSlug(),
       albumName: albumPath.slice('Albums/'.length),
       albumPath,
-      cap,
+      cap: isDelivery ? 0 : cap,
+      kind,
       passwordSalt: salt,
       passwordHash: hash,
-      phase: 'proofing',
+      phase: isDelivery ? 'delivery' : 'proofing',
       items,
       selections: [],
       createdAt: Date.now(),
@@ -263,6 +275,9 @@ export const sharesService = {
     await loadShares();
     const rec = getShareById(id);
     if (!rec) throw new AppError('Share not found', 404);
+    if (kindOf(rec) === 'delivery') {
+      throw new AppError('This share is already a download-everything link', 409);
+    }
     if (rec.phase === 'proofing') {
       throw new AppError('The client has not submitted their selection yet', 400);
     }
@@ -277,7 +292,7 @@ export const sharesService = {
     await loadShares();
     const rec = getShareById(id);
     if (!rec) throw new AppError('Share not found', 404);
-    const items = await generatePreviews(rec.id, rec.albumPath, progressId);
+    const items = await generatePreviews(rec.id, rec.albumPath, progressId, kindOf(rec) !== 'delivery');
     if (items.length === 0) throw new AppError('No edited JPGs to publish', 400);
     const keep = new Set(items);
     const next: ShareRecord = {
@@ -318,6 +333,9 @@ export const sharesService = {
   async setSelections(slug: string, files: string[]): Promise<SharePublicState> {
     await loadShares();
     const rec = requireBySlug(slug);
+    if (kindOf(rec) === 'delivery') {
+      throw new AppError('This gallery does not use selections', 409);
+    }
     if (rec.phase !== 'proofing') {
       throw new AppError('This selection has already been submitted', 409);
     }
@@ -341,6 +359,9 @@ export const sharesService = {
   async submit(slug: string): Promise<SharePublicState> {
     await loadShares();
     const rec = requireBySlug(slug);
+    if (kindOf(rec) === 'delivery') {
+      throw new AppError('This gallery does not use selections', 409);
+    }
     if (rec.phase !== 'proofing') {
       throw new AppError('This selection has already been submitted', 409);
     }
@@ -372,7 +393,8 @@ export const sharesService = {
     const rec = requireBySlug(slug);
     assertPlainFilename(file);
     if (rec.phase !== 'delivery') throw new AppError('Downloads are not available yet', 403);
-    if (!rec.selections.includes(file)) throw new AppError('Not part of your selection', 403);
+    const allowed = kindOf(rec) === 'delivery' ? rec.items : rec.selections;
+    if (!allowed.includes(file)) throw new AppError('Not part of your selection', 403);
     const abs = path.join(safeAlbumDir(rec.albumPath), EDITED_DIR, file);
     const stat = await fs.stat(abs).catch(() => {
       throw new AppError('File not found', 404);
@@ -387,8 +409,9 @@ export const sharesService = {
     const rec = requireBySlug(slug);
     if (rec.phase !== 'delivery') throw new AppError('Downloads are not available yet', 403);
     const editedDir = path.join(safeAlbumDir(rec.albumPath), EDITED_DIR);
+    const wanted = kindOf(rec) === 'delivery' ? rec.items : rec.selections;
     const out: { abs: string; name: string }[] = [];
-    for (const file of rec.selections) {
+    for (const file of wanted) {
       const abs = path.join(editedDir, file);
       const stat = await fs.stat(abs).catch(() => null);
       if (stat?.isFile()) out.push({ abs, name: file });

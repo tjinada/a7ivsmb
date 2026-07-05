@@ -16,12 +16,16 @@ export const sharesController = {
 
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const body = (req.body ?? {}) as { albumPath?: unknown; cap?: unknown; password?: unknown; progressId?: unknown };
+      const body = (req.body ?? {}) as { albumPath?: unknown; cap?: unknown; password?: unknown; progressId?: unknown; kind?: unknown };
       if (typeof body.albumPath !== 'string') throw new AppError('albumPath is required', 400);
-      if (typeof body.cap !== 'number' || !Number.isFinite(body.cap)) throw new AppError('cap must be a number', 400);
+      const kind = body.kind === 'delivery' ? 'delivery' : 'proofing';
+      if (kind === 'proofing' && (typeof body.cap !== 'number' || !Number.isFinite(body.cap))) {
+        throw new AppError('cap must be a number', 400);
+      }
+      const cap = typeof body.cap === 'number' && Number.isFinite(body.cap) ? body.cap : 0;
       if (typeof body.password !== 'string') throw new AppError('password is required', 400);
       const progressId = isValidProgressId(body.progressId) ? body.progressId : undefined;
-      sendSuccess(res, await sharesService.create(body.albumPath, body.cap, body.password, progressId), 201);
+      sendSuccess(res, await sharesService.create(body.albumPath, cap, body.password, progressId, kind), 201);
     } catch (err) {
       next(err);
     }
