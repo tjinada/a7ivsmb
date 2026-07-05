@@ -809,7 +809,7 @@ export function GalleryPage() {
                           onClick={() => setPath(f.path)}
                           className="group flex flex-col overflow-hidden rounded-xl border border-border bg-surface text-left transition hover:border-primary-500/50 active:scale-[0.98]"
                         >
-                          <div className="relative aspect-[4/3] w-full bg-base">
+                          <div className="relative aspect-[4/3] w-full flex-shrink-0 overflow-hidden bg-base">
                             {f.cover ? (
                               <AuthImage
                                 src={`/gallery/thumb?path=${encodeURIComponent(f.cover)}`}
