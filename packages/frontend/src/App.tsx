@@ -8,6 +8,7 @@ import { GalleryPage } from '@/features/gallery/GalleryPage';
 import { TransfersPage } from '@/features/transfers/TransfersPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { PWAUpdatePrompt, InstallPrompt, OfflineIndicator } from '@/components/pwa';
+import { Toaster } from '@/components/Toast';
 
 export default function App() {
   const token = useAuthStore((s) => s.token);
@@ -21,6 +22,7 @@ export default function App() {
   return (
     <>
       <OfflineIndicator />
+      <Toaster />
       <PWAUpdatePrompt />
       <InstallPrompt />
       {token ? (

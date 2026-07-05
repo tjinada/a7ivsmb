@@ -7,6 +7,7 @@ import type {
 import { api } from '@/api/client';
 import { AuthImage } from '../gallery/AuthImage';
 import { Lightbox } from '../gallery/Lightbox';
+import { toast } from '@/components/Toast';
 
 const RAW_EXTS = ['.arw', '.dng', '.cr2', '.cr3', '.nef', '.raf', '.rw2', '.orf', '.srw', '.pef', '.sr2', '.x3f'];
 const isRaw = (name: string) => RAW_EXTS.some((e) => name.toLowerCase().endsWith(e));
@@ -131,10 +132,10 @@ export function TransfersPage() {
       qc.invalidateQueries({ queryKey: ['ftp'] });
       qc.invalidateQueries({ queryKey: ['gallery'] });
       if (r && r.failed > 0) {
-        window.alert(`Filed ${r.filed}, but ${r.failed} still couldn't be filed. Check the errors above.`);
+        toast.error(`Filed ${r.filed}, but ${r.failed} still couldn't be filed. Check the errors above.`);
       }
     },
-    onError: () => window.alert('Could not re-file the photos'),
+    onError: () => toast.error('Could not re-file the photos'),
   });
   const { data: transfers, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['ftp', 'transfers'],

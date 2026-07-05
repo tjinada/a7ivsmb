@@ -13,7 +13,24 @@ body {
   margin: 0;
 }
 
+@keyframes img-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
 @layer utilities {
+  /* Loading placeholder for thumbnails: slow diagonal sheen over the surface
+     tone. Fades out (opacity transition on the element) once the image loads. */
+  .img-shimmer {
+    background: linear-gradient(105deg, #151a23 40%, #1c2330 50%, #151a23 60%);
+    background-size: 200% 100%;
+    animation: img-shimmer 1.6s ease-in-out infinite;
+  }
+
   /* iOS safe-area insets (notch / Dynamic Island / home indicator).
      Applied per chrome element — header, tab bar, fullscreen overlays —
      because body padding alone can't inset fixed-position elements. */

@@ -23,6 +23,7 @@ import { BackfillDialog } from './BackfillDialog';
 import { DeleteFolderDialog } from './DeleteFolderDialog';
 import { StarRating } from './StarRating';
 import { shareItems, downloadZip } from './download';
+import { toast } from '@/components/Toast';
 
 async function browse(path: string): Promise<GalleryBrowseResult> {
   const res = await api.get<ApiResponse<GalleryBrowseResult>>('/gallery/browse', { params: { path } });
@@ -220,7 +221,7 @@ export function GalleryPage() {
       api.put('/gallery/rating', { path: p, stars }),
     onError: () => {
       qc.invalidateQueries({ queryKey: ['gallery'] });
-      window.alert('Could not save rating');
+      toast.error('Could not save rating');
     },
   });
 
@@ -229,7 +230,7 @@ export function GalleryPage() {
       api.post('/gallery/rate-bulk', { paths, stars }),
     onError: () => {
       qc.invalidateQueries({ queryKey: ['gallery'] });
-      window.alert('Could not rate photos');
+      toast.error('Could not rate photos');
     },
   });
 
@@ -251,7 +252,7 @@ export function GalleryPage() {
         setPath(result.path);
       }
     },
-    onError: () => window.alert('Could not create the album'),
+    onError: () => toast.error('Could not create the album'),
   });
 
   const createAlbum = (opts: { name: string; paths: string[]; formats: AlbumFormats }) => {
@@ -272,7 +273,7 @@ export function GalleryPage() {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         'Could not rename the album';
-      window.alert(msg);
+      toast.error(msg);
     },
   });
 
@@ -287,7 +288,7 @@ export function GalleryPage() {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         'Could not delete the album';
-      window.alert(msg);
+      toast.error(msg);
     },
   });
 
@@ -303,7 +304,7 @@ export function GalleryPage() {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         'Could not delete the folder';
-      window.alert(msg);
+      toast.error(msg);
     },
   });
 
@@ -340,7 +341,7 @@ export function GalleryPage() {
       exitSelect();
       qc.invalidateQueries({ queryKey: ['gallery'] });
     } catch {
-      window.alert('Delete failed');
+      toast.error('Delete failed');
     }
   };
 
@@ -397,7 +398,7 @@ export function GalleryPage() {
       const ok = await shareItems(selectedItems);
       if (!ok) await downloadZip(selectedItems);
     } catch {
-      window.alert('Share failed');
+      toast.error('Share failed');
     } finally {
       setBusy(null);
     }
@@ -408,7 +409,7 @@ export function GalleryPage() {
     try {
       await downloadZip(selectedItems);
     } catch {
-      window.alert('Download failed');
+      toast.error('Download failed');
     } finally {
       setBusy(null);
     }
@@ -707,7 +708,7 @@ export function GalleryPage() {
             </button>
           </div>
         ) : hasContent ? (
-          <div className="p-3">
+          <div className="mx-auto max-w-screen-2xl p-3">
             {!isTimeline && isAlbumRoot && (
               <div className="mb-4 rounded-xl border border-primary-500/30 bg-primary-500/[0.07] p-3">
                 <div className="flex items-center gap-2.5">
@@ -800,7 +801,7 @@ export function GalleryPage() {
                 {otherFolders.length > 0 && (
                   <>
                     <SectionLabel>Folders</SectionLabel>
-                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                       {otherFolders.map((f) => (
                         <button
                           key={f.path}
@@ -865,7 +866,7 @@ export function GalleryPage() {
                           <span className="ml-1.5 text-gray-500">{g.items.length}</span>
                         </h2>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10">
                         {g.items.map(renderTile)}
                       </div>
                     </section>
@@ -884,7 +885,7 @@ export function GalleryPage() {
                   {shownItems.length === 0 ? (
                     <p className="py-8 text-center text-sm text-gray-500">No photos match this filter.</p>
                   ) : (
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10">
                       {shownItems.map(renderTile)}
                     </div>
                   )}

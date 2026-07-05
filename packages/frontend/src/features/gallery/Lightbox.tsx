@@ -6,6 +6,7 @@ import type { GalleryItem, ExifInfo, ApiResponse } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { saveImage } from './download';
 import { StarRating } from './StarRating';
+import { toast } from '@/components/Toast';
 
 /**
  * Full-screen enlarge view. Native pinch-zoom; rate, download, delete, close,
@@ -40,6 +41,9 @@ export function Lightbox({
   // The preview loads as a plain <img> (the media cookie authorizes it), so iOS
   // long-press shares the real image and the browser can cache it.
   const previewUrl = `/api/gallery/preview?path=${encodeURIComponent(photo.path)}`;
+  // The grid already loaded this thumb, so it's in the browser cache: shown
+  // blurred underneath while the full preview loads, then the preview fades in.
+  const thumbUrl = `/api/gallery/thumb?path=${encodeURIComponent(photo.path)}`;
 
   // Reset load/fail state when moving to a different photo.
   useEffect(() => {
@@ -99,7 +103,7 @@ export function Lightbox({
     try {
       await saveImage(photo);
     } catch {
-      window.alert('Download failed');
+      toast.error('Download failed');
     } finally {
       setSaving(false);
     }
@@ -190,6 +194,21 @@ export function Lightbox({
           </div>
         ) : (
           <>
+            {!loaded && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden p-2"
+              >
+                <img
+                  src={thumbUrl}
+                  alt=""
+                  className="max-h-full max-w-full scale-[1.02] object-contain blur-sm"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
             <img
               key={previewUrl}
               src={previewUrl}
@@ -197,8 +216,9 @@ export function Lightbox({
               onClick={(e) => e.stopPropagation()}
               onLoad={() => setLoaded(true)}
               onError={() => setFailed(true)}
-              className="max-h-full max-w-full object-contain"
-              style={loaded ? undefined : { display: 'none' }}
+              className={`max-h-full max-w-full object-contain transition-opacity duration-200 ${
+                loaded ? 'opacity-100' : 'opacity-0'
+              }`}
             />
             {!loaded && <Loader2 className="h-8 w-8 animate-spin text-white/70" />}
           </>
