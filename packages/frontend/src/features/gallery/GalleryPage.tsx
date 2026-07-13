@@ -24,6 +24,7 @@ import { BackfillDialog } from './BackfillDialog';
 import { DeleteFolderDialog } from './DeleteFolderDialog';
 import { StarRating } from './StarRating';
 import { shareItems, downloadZip } from './download';
+import { thumbUrl } from './mediaUrl';
 import { toast } from '@/components/Toast';
 
 async function browse(path: string): Promise<GalleryBrowseResult> {
@@ -448,7 +449,7 @@ export function GalleryPage() {
         }`}
       >
         <AuthImage
-          src={`/gallery/thumb?path=${encodeURIComponent(it.path)}`}
+          src={thumbUrl(it.path)}
           alt={it.name}
           className="h-full w-full [&>img]:transition-transform [&>img]:duration-300 group-hover:[&>img]:scale-110"
           fallback={
@@ -818,7 +819,7 @@ export function GalleryPage() {
                           <div className="relative aspect-[4/3] w-full flex-shrink-0 overflow-hidden bg-base">
                             {f.cover ? (
                               <AuthImage
-                                src={`/gallery/thumb?path=${encodeURIComponent(f.cover)}`}
+                                src={thumbUrl(f.cover)}
                                 alt={f.name}
                                 className="h-full w-full [&>img]:transition-transform [&>img]:duration-300 group-hover:[&>img]:scale-105"
                                 fallback={

@@ -6,6 +6,7 @@ import type {
 } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from '../gallery/AuthImage';
+import { thumbUrl } from '../gallery/mediaUrl';
 import { Lightbox } from '../gallery/Lightbox';
 import { toast } from '@/components/Toast';
 
@@ -252,7 +253,7 @@ export function TransfersPage() {
               >
                 <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-base">
                   <AuthImage
-                    src={`/gallery/thumb?path=${encodeURIComponent(t.relPath)}`}
+                    src={thumbUrl(t.relPath)}
                     alt={t.name}
                     className="h-full w-full"
                     fallback={

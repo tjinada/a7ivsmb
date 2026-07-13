@@ -21,7 +21,7 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"]/g, (c) =>
     c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;');
 }
-function previewUrl(file){ return API + '/preview/' + encodeURIComponent(file); }
+function previewUrl(file){ return API + '/preview/' + encodeURIComponent(file) + '?r=2'; }
 function setStatus(msg, isErr){
   const s = $('status'); if(!s) return;
   s.textContent = msg || '';

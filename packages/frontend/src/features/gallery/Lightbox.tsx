@@ -7,6 +7,7 @@ import { api } from '@/api/client';
 import { saveImage } from './download';
 import { StarRating } from './StarRating';
 import { useHistoryDismiss } from './useHistoryDismiss';
+import { thumbUrl as mediaThumbUrl, previewUrl as mediaPreviewUrl } from './mediaUrl';
 import { toast } from '@/components/Toast';
 
 /**
@@ -45,10 +46,10 @@ export function Lightbox({
 
   // The preview loads as a plain <img> (the media cookie authorizes it), so iOS
   // long-press shares the real image and the browser can cache it.
-  const previewUrl = `/api/gallery/preview?path=${encodeURIComponent(photo.path)}`;
+  const previewUrl = mediaPreviewUrl(photo.path);
   // The grid already loaded this thumb, so it's in the browser cache: shown
   // blurred underneath while the full preview loads, then the preview fades in.
-  const thumbUrl = `/api/gallery/thumb?path=${encodeURIComponent(photo.path)}`;
+  const thumbUrl = mediaThumbUrl(photo.path);
 
   // Reset load/fail state when moving to a different photo.
   useEffect(() => {

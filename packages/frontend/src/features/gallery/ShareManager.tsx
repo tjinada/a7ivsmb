@@ -4,6 +4,7 @@ import { Loader2, Share2, Copy, Check, RefreshCw, Send, Trash2, X } from 'lucide
 import type { ApiResponse, ShareSummary, SharePhase } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from './AuthImage';
+import { thumbUrl } from './mediaUrl';
 import { newProgressId, useShareProgress } from './useShareProgress';
 
 async function fetchShares(): Promise<ShareSummary[]> {
@@ -146,7 +147,7 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
                                 {s.selections.map((f) => (
                                   <figure key={f} className="m-0 min-w-0">
                                     <AuthImage
-                                      src={`/gallery/thumb?path=${encodeURIComponent(`${s.albumPath}/Edited/${f}`)}`}
+                                      src={thumbUrl(`${s.albumPath}/Edited/${f}`)}
                                       alt={f}
                                       className="aspect-square overflow-hidden rounded-md bg-surface"
                                     />
