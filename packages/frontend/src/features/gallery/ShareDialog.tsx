@@ -4,6 +4,7 @@ import { Loader2, Share2, Copy, Check, ExternalLink } from 'lucide-react';
 import type { ApiResponse, ShareCreateResult, ShareKind } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { newProgressId, useShareProgress } from './useShareProgress';
+import { shareMessage } from './shareMessage';
 
 /**
  * Create a password-protected client proofing link from an album. The link
@@ -50,12 +51,13 @@ export function ShareDialog({
 
   const copyLink = async () => {
     if (!created) return;
+    const msg = shareMessage(created.albumName, created.kind, created.url);
     try {
-      await navigator.clipboard.writeText(created.url);
+      await navigator.clipboard.writeText(msg);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      window.prompt('Copy this link', created.url);
+      window.prompt('Copy this message', msg);
     }
   };
 

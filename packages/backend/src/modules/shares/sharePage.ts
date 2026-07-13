@@ -4,6 +4,15 @@
 // and nothing that could leak the owner gallery. The slug is injected server
 // side; everything else is driven by the /api/public/share/:slug endpoints.
 
+import type { ShareKind } from '@sonycam/shared';
+import { config } from '../../config/index.js';
+
+/** Server-side HTML/attribute escape for values injected into the template. */
+function escAttr(s: string): string {
+  return s.replace(/[&<>"]/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;');
+}
+
 const JS_CORE = `
 const API = '/api/public/share/' + SLUG;
 let state = null;
@@ -386,14 +395,33 @@ function safeJsonForScript(value: unknown): string {
 }
 
 /** Render the full standalone client page for a share slug. */
-export function renderSharePage(slug: string): string {
+export function renderSharePage(slug: string, meta: { albumName: string; kind: ShareKind }): string {
+  const title = escAttr(meta.albumName);
+  const desc = meta.kind === 'delivery'
+    ? 'Your photos are ready to view and download.'
+    : 'Your photos are ready — view the gallery and pick your favourites.';
+  // OG URLs must be absolute; without SHARE_HOST (single-host dev) the unfurl
+  // tags are omitted and the page still works.
+  const base = config.shareHost ? `https://${config.shareHost}` : '';
+  const og = base
+    ? `<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="Photo Gallery"/>
+<meta property="og:title" content="${title}"/>
+<meta property="og:description" content="${desc}"/>
+<meta property="og:url" content="${base}/s/${slug}"/>
+<meta property="og:image" content="${base}/og.png"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta name="twitter:card" content="summary_large_image"/>`
+    : '';
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <meta name="robots" content="noindex, nofollow"/>
-<title>Private gallery</title>
+<title>${title}</title>
+${og}
 <style>${PAGE_CSS}</style>
 </head>
 <body>

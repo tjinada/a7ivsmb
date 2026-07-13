@@ -1,8 +1,10 @@
 import { loadShares, getShareBySlug } from './shares.store.js';
 import { logger } from '../../utils/logger.js';
+import type { ShareKind } from '@sonycam/shared';
 
 export { ownerShareRoutes, publicShareRoutes } from './shares.routes.js';
 export { renderSharePage, renderInactivePage } from './sharePage.js';
+export { ogCardPng } from './ogCard.js';
 export { albumHasShares, loadShares, anyShareUnder } from './shares.store.js';
 export { isValidSlug } from './shares.auth.js';
 
@@ -16,10 +18,14 @@ export async function initShares(): Promise<void> {
 }
 
 
-/** True when a syntactically valid slug resolves to a live share. Used by the
- *  /s/:slug page route so revoked/unknown links get an honest "no longer
- *  active" page instead of the password gate. */
-export async function shareSlugExists(slug: string): Promise<boolean> {
+/** Unfurl/title metadata for the /s/:slug page, or null when the slug doesn't
+ *  resolve to a live share (revoked/unknown → honest "no longer active" page
+ *  instead of a password gate that can never be unlocked). */
+export async function sharePageMeta(
+  slug: string,
+): Promise<{ albumName: string; kind: ShareKind } | null> {
   await loadShares();
-  return getShareBySlug(slug) !== null;
+  const rec = getShareBySlug(slug);
+  if (!rec) return null;
+  return { albumName: rec.albumName, kind: rec.kind ?? 'proofing' };
 }

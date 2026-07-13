@@ -13,7 +13,7 @@ import { logger } from './utils/logger.js';
 import { authRoutes } from './modules/auth/index.js';
 import { ftpRoutes, initFtp } from './modules/ftp/index.js';
 import { galleryRoutes } from './modules/gallery/index.js';
-import { ownerShareRoutes, publicShareRoutes, renderSharePage, renderInactivePage, shareSlugExists, initShares, isValidSlug } from './modules/shares/index.js';
+import { ownerShareRoutes, publicShareRoutes, renderSharePage, renderInactivePage, sharePageMeta, ogCardPng, initShares, isValidSlug } from './modules/shares/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -62,11 +62,25 @@ app.get('/s/:slug', async (req, res, next) => {
   try {
     // Revoked or never-existed slugs get an honest "no longer active" page
     // rather than a password gate that can never be unlocked.
-    if (!(await shareSlugExists(req.params.slug))) {
+    const meta = await sharePageMeta(req.params.slug);
+    if (!meta) {
       res.status(404).type('html').send(renderInactivePage());
       return;
     }
-    res.type('html').send(renderSharePage(req.params.slug));
+    res.type('html').send(renderSharePage(req.params.slug, meta));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Generic branded card for link unfurls. Public on every host by design: chat
+// scrapers fetch it without the share password, and it contains nothing about
+// any gallery. Long-lived cache — it only changes when the code does.
+app.get('/og.png', async (_req, res, next) => {
+  try {
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=604800');
+    res.send(await ogCardPng());
   } catch (err) {
     next(err);
   }

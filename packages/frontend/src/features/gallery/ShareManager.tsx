@@ -5,6 +5,7 @@ import type { ApiResponse, ShareSummary, SharePhase } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { AuthImage } from './AuthImage';
 import { thumbUrl } from './mediaUrl';
+import { shareMessage } from './shareMessage';
 import { newProgressId, useShareProgress } from './useShareProgress';
 
 async function fetchShares(): Promise<ShareSummary[]> {
@@ -54,12 +55,13 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
   });
 
   const copy = async (s: ShareSummary) => {
+    const msg = shareMessage(s.albumName, s.kind, s.url);
     try {
-      await navigator.clipboard.writeText(s.url);
+      await navigator.clipboard.writeText(msg);
       setCopiedId(s.id);
       setTimeout(() => setCopiedId((c) => (c === s.id ? null : c)), 1800);
     } catch {
-      window.prompt('Copy this link', s.url);
+      window.prompt('Copy this message', msg);
     }
   };
 
