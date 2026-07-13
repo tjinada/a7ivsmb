@@ -254,7 +254,7 @@ function cacheFilesFor(file: string, stat: { mtimeMs: number; size: number }): s
   return (Object.keys(SIZES) as Variant[]).map((variant) => {
     const { width } = SIZES[variant];
     const key = createHash('sha1')
-      .update(`${file}|${stat.mtimeMs}|${stat.size}|${variant}|${width}`)
+      .update(`${file}|${stat.mtimeMs}|${stat.size}|${variant}|${width}|srgb`)
       .digest('hex');
     return path.join(config.cacheDir, `${key}.webp`);
   });
@@ -1063,7 +1063,7 @@ export const galleryService = {
 
     const { width, quality } = SIZES[variant];
     const key = createHash('sha1')
-      .update(`${file}|${stat.mtimeMs}|${stat.size}|${variant}|${width}`)
+      .update(`${file}|${stat.mtimeMs}|${stat.size}|${variant}|${width}|srgb`)
       .digest('hex');
     const cacheFile = path.join(config.cacheDir, `${key}.webp`);
 
@@ -1083,6 +1083,7 @@ export const galleryService = {
       out = await sharp(input, { failOn: 'none' })
         .rotate() // honor EXIF orientation
         .resize({ width, height: width, fit: 'inside', withoutEnlargement: true })
+        .withIccProfile('srgb') // convert wide-gamut (Adobe RGB etc.) sources to sRGB so previews match originals
         .webp({ quality })
         .toBuffer();
     } catch {

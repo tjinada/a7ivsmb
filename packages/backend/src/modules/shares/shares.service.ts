@@ -161,6 +161,7 @@ async function generatePreviews(id: string, albumPath: string, progressId?: stri
         const resized = await sharp(src, { failOn: 'none' })
           .rotate()
           .resize({ width: previewMaxEdge, height: previewMaxEdge, fit: 'inside', withoutEnlargement: true })
+          .withIccProfile('srgb') // convert wide-gamut (Adobe RGB etc.) exports to sRGB before compositing
           .toBuffer({ resolveWithObject: true });
         await sharp(resized.data)
           .composite(watermark ? [{ input: watermarkSvg(resized.info.width, resized.info.height) }] : [])
