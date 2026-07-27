@@ -9,6 +9,7 @@ import { AuthImage } from '../gallery/AuthImage';
 import { thumbUrl } from '../gallery/mediaUrl';
 import { Lightbox } from '../gallery/Lightbox';
 import { toast } from '@/components/Toast';
+import { TransferSpeedChart } from './TransferSpeedChart';
 
 const RAW_EXTS = ['.arw', '.dng', '.cr2', '.cr3', '.nef', '.raf', '.rw2', '.orf', '.srw', '.pef', '.sr2', '.x3f'];
 const isRaw = (name: string) => RAW_EXTS.some((e) => name.toLowerCase().endsWith(e));
@@ -166,6 +167,8 @@ export function TransfersPage() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {transfers && transfers.length > 0 && <TransferSpeedChart transfers={transfers} />}
+
         {strays && strays.length > 0 && (
           <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
             <div className="flex items-center gap-2.5">

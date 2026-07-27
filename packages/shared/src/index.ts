@@ -93,8 +93,20 @@ export interface TransferEvent {
   path: string;       // absolute path on the share
   relPath: string;    // POSIX path relative to the share root (for gallery URLs)
   size: number;       // bytes
-  time: number;       // epoch milliseconds
+  time: number;       // epoch milliseconds (filing complete — drives "N ago")
   clientIp: string;
+  /** When the FTP STOR finished, i.e. the last byte landed. Distinct from
+   *  `time`, which is stamped after filing (exiftool + move) also completes. */
+  receivedAt: number;
+  /** Milliseconds spent in fileIntoFolder(): the exiftool capture-date read
+   *  plus the rename, or a full cross-device copy on unraid's EXDEV path.
+   *  Rising values here point at the array rather than the network. */
+  filingMs: number;
+  /** Transfer throughput in bytes/second, derived from the gap to the previous
+   *  arrival's `receivedAt`. Null for the first arrival and whenever that gap
+   *  exceeds the idle threshold, since the camera wasn't sending back-to-back
+   *  and the figure would be meaningless. */
+  bytesPerSec: number | null;
 }
 
 // ── Gallery (Phase 3, folder-aware) ────────────────────────────────────────
