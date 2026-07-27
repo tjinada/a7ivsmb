@@ -2,6 +2,12 @@
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   darkMode: 'class',
+  // Gate every hover:/group-hover: rule behind `@media (hover: hover)`. A
+  // phone has no hover, so those rules only ever cost paint work during scroll
+  // (and leave hover states stuck on after a tap).
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   theme: {
     extend: {
       colors: {

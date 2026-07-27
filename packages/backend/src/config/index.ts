@@ -41,6 +41,12 @@ export const config = {
   // so it lives in config from the start.)
   photosPath: path.resolve(process.env.PHOTOS_PATH ?? '/photos'),
 
+  // Max concurrent thumbnail/preview *generations*. Cache hits are never
+  // queued, so this bounds only the expensive work a cold folder triggers
+  // (full-res decode, or an exiftool spawn for RAW). Raise it if renders
+  // visibly queue up; lower it if the box gets sluggish while browsing.
+  renderConcurrency: Math.max(1, Number(process.env.RENDER_CONCURRENCY) || 3),
+
   // Disk cache for generated thumbnails/previews (Phase 3).
   cacheDir: path.resolve(process.env.THUMB_CACHE_PATH ?? `${process.env.DATA_DIR ?? './data'}/thumbnails`),
 

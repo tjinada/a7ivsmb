@@ -28,6 +28,7 @@ import { albumHasShares, loadShares, anyShareUnder } from '../shares/index.js';
 import { captureDate } from '../../utils/captureDate.js';
 import { mkdirShared, relaxSharePerms } from '../../utils/shareFs.js';
 import { compareNames } from '../../utils/naturalOrder.js';
+import { runQueued } from './gallery.render-queue.js';
 
 // Browser-renderable raster formats. RAW formats are previewed via their
 // embedded JPEG (see render/extractRawPreview). Anything else is hidden.
@@ -517,6 +518,55 @@ async function planBackfill(scanRel: string): Promise<{
   }
 
   return { rows, scanned: collected.length, unreadable, alreadyCorrect };
+}
+
+/** Read a previously generated rendition, or null if it isn't cached yet. */
+async function readCache(cacheFile: string): Promise<{ data: Buffer; type: string } | null> {
+  try {
+    return { data: await fs.readFile(cacheFile), type: 'image/webp' };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Generate one rendition and write it into the disk cache. Only ever called
+ * through the render queue, so at most `config.renderConcurrency` of these run
+ * at a time and no two run for the same cache key.
+ */
+async function generateRendition(
+  file: string,
+  cacheFile: string,
+  variant: Variant,
+): Promise<{ data: Buffer; type: string }> {
+  // A job for this key may have finished while this one waited for a slot.
+  const hit = await readCache(cacheFile);
+  if (hit) return hit;
+
+  const { width, quality } = SIZES[variant];
+
+  // RAW files can't be decoded by sharp directly; use the camera's embedded
+  // JPEG preview instead. (Throws 415 here if there's no usable preview.)
+  const ext = path.extname(file).toLowerCase();
+  const input: string | Buffer = RAW.has(ext) ? await extractRawPreview(file) : file;
+
+  let out: Buffer;
+  try {
+    out = await sharp(input, { failOn: 'none' })
+      .rotate() // honor EXIF orientation
+      .resize({ width, height: width, fit: 'inside', withoutEnlargement: true })
+      .withIccProfile('srgb') // convert wide-gamut (Adobe RGB etc.) sources to sRGB so previews match originals
+      .webp({ quality })
+      .toBuffer();
+  } catch {
+    throw new AppError('Cannot render this image format', 415);
+  }
+
+  await fs.mkdir(config.cacheDir, { recursive: true });
+  const tmp = `${cacheFile}.tmp`;
+  await fs.writeFile(tmp, out);
+  await fs.rename(tmp, cacheFile);
+  return { data: out, type: 'image/webp' };
 }
 
 export const galleryService = {
@@ -1061,40 +1111,18 @@ export const galleryService = {
     });
     if (!stat.isFile()) throw new AppError('Not a file', 400);
 
-    const { width, quality } = SIZES[variant];
+    const { width } = SIZES[variant];
     const key = createHash('sha1')
       .update(`${file}|${stat.mtimeMs}|${stat.size}|${variant}|${width}|srgb`)
       .digest('hex');
     const cacheFile = path.join(config.cacheDir, `${key}.webp`);
 
-    try {
-      return { data: await fs.readFile(cacheFile), type: 'image/webp' };
-    } catch {
-      /* cache miss → generate */
-    }
+    // Hits are served straight off disk, unqueued: a warm folder must stay as
+    // fast as the filesystem however many tiles the browser asks for at once.
+    const hit = await readCache(cacheFile);
+    if (hit) return hit;
 
-    // RAW files can't be decoded by sharp directly; use the camera's embedded
-    // JPEG preview instead. (Throws 415 here if there's no usable preview.)
-    const ext = path.extname(file).toLowerCase();
-    const input: string | Buffer = RAW.has(ext) ? await extractRawPreview(file) : file;
-
-    let out: Buffer;
-    try {
-      out = await sharp(input, { failOn: 'none' })
-        .rotate() // honor EXIF orientation
-        .resize({ width, height: width, fit: 'inside', withoutEnlargement: true })
-        .withIccProfile('srgb') // convert wide-gamut (Adobe RGB etc.) sources to sRGB so previews match originals
-        .webp({ quality })
-        .toBuffer();
-    } catch {
-      throw new AppError('Cannot render this image format', 415);
-    }
-
-    await fs.mkdir(config.cacheDir, { recursive: true });
-    const tmp = `${cacheFile}.tmp`;
-    await fs.writeFile(tmp, out);
-    await fs.rename(tmp, cacheFile);
-    return { data: out, type: 'image/webp' };
+    return runQueued(key, () => generateRendition(file, cacheFile, variant));
   },
 
   async original(rel: string): Promise<{ stream: Readable; name: string; size: number; type: string }> {

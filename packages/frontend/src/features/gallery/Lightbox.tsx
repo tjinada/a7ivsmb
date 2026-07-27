@@ -46,10 +46,10 @@ export function Lightbox({
 
   // The preview loads as a plain <img> (the media cookie authorizes it), so iOS
   // long-press shares the real image and the browser can cache it.
-  const previewUrl = mediaPreviewUrl(photo.path);
+  const previewUrl = mediaPreviewUrl(photo.path, photo.modified);
   // The grid already loaded this thumb, so it's in the browser cache: shown
   // blurred underneath while the full preview loads, then the preview fades in.
-  const thumbUrl = mediaThumbUrl(photo.path);
+  const thumbUrl = mediaThumbUrl(photo.path, photo.modified);
 
   // Reset load/fail state when moving to a different photo.
   useEffect(() => {

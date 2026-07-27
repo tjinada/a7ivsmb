@@ -13,22 +13,13 @@ body {
   margin: 0;
 }
 
-@keyframes img-shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
 @layer utilities {
-  /* Loading placeholder for thumbnails: slow diagonal sheen over the surface
-     tone. Fades out (opacity transition on the element) once the image loads. */
-  .img-shimmer {
+  /* Loading placeholder for thumbnails: a static diagonal sheen over the
+     surface tone, unmounted the moment the image loads. Deliberately NOT
+     animated — an animated gradient repaints every frame on every unloaded
+     tile, which is the largest single source of scroll jank in a big grid. */
+  .img-placeholder {
     background: linear-gradient(105deg, #151a23 40%, #1c2330 50%, #151a23 60%);
-    background-size: 200% 100%;
-    animation: img-shimmer 1.6s ease-in-out infinite;
   }
 
   /* iOS safe-area insets (notch / Dynamic Island / home indicator).

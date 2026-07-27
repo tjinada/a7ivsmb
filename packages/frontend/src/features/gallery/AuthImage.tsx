@@ -8,8 +8,9 @@ import { ImageOff } from 'lucide-react';
  * the image and iOS long-press "Share / Save" act on the real photo (not a
  * blob: URL). Shows `fallback` (or a placeholder) if the image fails to load.
  *
- * While the image loads, a shimmer placeholder overlays the tile and fades
- * out on load (cached images fire onLoad immediately, so no flash).
+ * While the image loads, a flat placeholder overlays the tile. It unmounts on
+ * load rather than fading out, so a screen of loaded tiles has nothing extra
+ * to paint (cached images fire onLoad immediately, so no flash).
  */
 export function AuthImage({
   src,
@@ -53,12 +54,9 @@ export function AuthImage({
             onLoad={() => setLoaded(true)}
             onError={() => setError(true)}
           />
-          <div
-            aria-hidden
-            className={`img-shimmer pointer-events-none absolute inset-0 transition-opacity duration-300 ${
-              loaded ? 'opacity-0' : 'opacity-100'
-            }`}
-          />
+          {!loaded && (
+            <div aria-hidden className="img-placeholder pointer-events-none absolute inset-0" />
+          )}
         </>
       )}
     </div>

@@ -15,7 +15,12 @@ async function serveRendition(req: Request, res: Response, next: NextFunction, v
   try {
     const { data, type } = await galleryService.render(reqPath(req), variant);
     res.set('Content-Type', type);
-    res.set('Cache-Control', 'private, max-age=86400');
+    // A URL carrying the source file's mtime (`v`) names one exact rendition
+    // forever — the cache key includes mtime, so editing a file yields a
+    // different URL — and can be cached hard. URLs without `v` (folder covers,
+    // the transfers list) keep the conservative daily expiry.
+    const versioned = typeof req.query.v === 'string' && req.query.v.length > 0;
+    res.set('Cache-Control', versioned ? 'private, max-age=31536000, immutable' : 'private, max-age=86400');
     res.send(data);
   } catch (err) {
     next(err);

@@ -449,7 +449,7 @@ export function GalleryPage() {
         }`}
       >
         <AuthImage
-          src={thumbUrl(it.path)}
+          src={thumbUrl(it.path, it.modified)}
           alt={it.name}
           className="h-full w-full [&>img]:transition-transform [&>img]:duration-300 group-hover:[&>img]:scale-110"
           fallback={
