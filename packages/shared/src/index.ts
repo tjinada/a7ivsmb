@@ -102,11 +102,6 @@ export interface TransferEvent {
    *  plus the rename, or a full cross-device copy on unraid's EXDEV path.
    *  Rising values here point at the array rather than the network. */
   filingMs: number;
-  /** Transfer throughput in bytes/second, derived from the gap to the previous
-   *  arrival's `receivedAt`. Null for the first arrival and whenever that gap
-   *  exceeds the idle threshold, since the camera wasn't sending back-to-back
-   *  and the figure would be meaningless. */
-  bytesPerSec: number | null;
 }
 
 // ── Gallery (Phase 3, folder-aware) ────────────────────────────────────────

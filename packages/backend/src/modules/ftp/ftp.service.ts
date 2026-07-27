@@ -14,16 +14,6 @@ import type { FtpStatus, TransferEvent, FtpErrorEvent, StrayFile } from '@sonyca
 const MAX_RECENT = 500;
 const recent: TransferEvent[] = [];
 
-/** Longest gap between two arrivals that still counts as back-to-back. Past
- *  this the camera was idle, so dividing file size by the gap would report a
- *  fake slowdown; throughput is recorded as null (an unmeasured break) instead. */
-const IDLE_GAP_MS = 30_000;
-
-/** When the previous STOR finished. Updated synchronously in the STOR handler
- *  so gaps stay in arrival order even though filing completes asynchronously
- *  and can finish out of order. */
-let lastStorAt: number | null = null;
-
 const MAX_ERRORS = 50;
 const recentErrors: FtpErrorEvent[] = [];
 let lastErrorTime: number | null = null;
@@ -85,23 +75,19 @@ async function fileIntoFolder(abs: string): Promise<string> {
   return dest;
 }
 
-/** Timing captured around one arrival. Omitted entirely by the stray re-filer,
- *  where nothing crossed the network and throughput would be meaningless. */
+/** Timing captured around one arrival. The stray re-filer omits it, since
+ *  nothing crossed the network there. Note there is deliberately no per-file
+ *  throughput: the camera opens two FTP connections and streams a shot's RAW
+ *  and JPG concurrently, so no single file has a well-defined rate. The chart
+ *  derives throughput by summing bytes over wall-clock windows instead. */
 interface RecordTiming {
   /** When the STOR finished. Defaults to now (re-file has no transfer). */
   receivedAt?: number;
-  /** Gap to the previous STOR, measured in arrival order by the STOR handler. */
-  gapMs?: number | null;
   /** Time spent in fileIntoFolder(): exiftool read plus rename or EXDEV copy. */
   filingMs?: number;
 }
 
 function record(absPath: string, size: number, ip: string, timing: RecordTiming = {}): void {
-  const receivedAt = timing.receivedAt ?? Date.now();
-  const gapMs = timing.gapMs ?? null;
-  // Back-to-back transfers only: file N occupied the window between the
-  // previous STOR completing and this one, so size/gap is its throughput.
-  const measurable = gapMs !== null && gapMs > 0 && gapMs <= IDLE_GAP_MS;
   const evt: TransferEvent = {
     name: path.basename(absPath),
     path: absPath,
@@ -109,9 +95,8 @@ function record(absPath: string, size: number, ip: string, timing: RecordTiming 
     size,
     time: Date.now(),
     clientIp: ip,
-    receivedAt,
+    receivedAt: timing.receivedAt ?? Date.now(),
     filingMs: timing.filingMs ?? 0,
-    bytesPerSec: measurable ? Math.round(size / (gapMs / 1000)) : null,
   };
   recent.unshift(evt);
   if (recent.length > MAX_RECENT) recent.pop();
@@ -249,27 +234,22 @@ export async function startFtp(): Promise<void> {
         recordError('transfer', `Upload failed: ${path.basename(fileName)}`, ip, error);
         return;
       }
-      // Stamped before filing begins, so throughput reflects the network alone
-      // and the exiftool read plus the (possibly cross-device) move are timed
-      // separately. Both the stamp and the gap are taken here rather than in
-      // record(), because filing runs unawaited and can complete out of order.
+      // Stamped before filing begins, so the exiftool read and the (possibly
+      // cross-device) move are timed apart from the transfer itself.
       const receivedAt = Date.now();
-      const gapMs = lastStorAt === null ? null : receivedAt - lastStorAt;
-      lastStorAt = receivedAt;
-
       const abs = path.isAbsolute(fileName) ? fileName : path.join(config.photosPath, fileName);
       fileIntoFolder(abs)
         .then((dest) =>
           fs.stat(dest).then((s) =>
-            record(dest, s.size, ip, { receivedAt, gapMs, filingMs: Date.now() - receivedAt }),
+            record(dest, s.size, ip, { receivedAt, filingMs: Date.now() - receivedAt }),
           ),
         )
         .catch((err: unknown) => {
           recordError('filing', `Could not file ${path.basename(abs)} into a dated folder`, ip, err);
           const filingMs = Date.now() - receivedAt;
           fs.stat(abs)
-            .then((s) => record(abs, s.size, ip, { receivedAt, gapMs, filingMs }))
-            .catch(() => record(abs, 0, ip, { receivedAt, gapMs, filingMs }));
+            .then((s) => record(abs, s.size, ip, { receivedAt, filingMs }))
+            .catch(() => record(abs, 0, ip, { receivedAt, filingMs }));
         });
     });
 
@@ -304,7 +284,6 @@ export async function stopFtp(): Promise<void> {
     server = null;
     listening = false;
     activeConnections = 0;
-    lastStorAt = null; // next arrival starts a fresh measurement run
   }
 }
 
