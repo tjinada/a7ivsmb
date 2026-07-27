@@ -28,7 +28,7 @@ import { albumHasShares, loadShares, anyShareUnder } from '../shares/index.js';
 import { captureDate } from '../../utils/captureDate.js';
 import { mkdirShared, relaxSharePerms } from '../../utils/shareFs.js';
 import { compareNames } from '../../utils/naturalOrder.js';
-import { runQueued } from './gallery.render-queue.js';
+import { runQueued, warmInBackground } from './gallery.render-queue.js';
 
 // Browser-renderable raster formats. RAW formats are previewed via their
 // embedded JPEG (see render/extractRawPreview). Anything else is hidden.
@@ -250,15 +250,23 @@ function safeResolve(rel: string): string {
   return full;
 }
 
+/** Cache key for one rendition of one source file. mtime + size are part of
+ *  the key, so an edited file naturally lands on a fresh entry. */
+function renditionKey(file: string, stat: { mtimeMs: number; size: number }, variant: Variant): string {
+  const { width } = SIZES[variant];
+  return createHash('sha1')
+    .update(`${file}|${stat.mtimeMs}|${stat.size}|${variant}|${width}|srgb`)
+    .digest('hex');
+}
+
+/** On-disk location of the rendition with the given key. */
+function cachePathFor(key: string): string {
+  return path.join(config.cacheDir, `${key}.webp`);
+}
+
 /** The cache file paths (all variants) for a given source file + stat. */
 function cacheFilesFor(file: string, stat: { mtimeMs: number; size: number }): string[] {
-  return (Object.keys(SIZES) as Variant[]).map((variant) => {
-    const { width } = SIZES[variant];
-    const key = createHash('sha1')
-      .update(`${file}|${stat.mtimeMs}|${stat.size}|${variant}|${width}|srgb`)
-      .digest('hex');
-    return path.join(config.cacheDir, `${key}.webp`);
-  });
+  return (Object.keys(SIZES) as Variant[]).map((v) => cachePathFor(renditionKey(file, stat, v)));
 }
 
 /** Share-relative root that holds curated albums (excluded from the timeline). */
@@ -553,8 +561,14 @@ async function generateRendition(
   let out: Buffer;
   try {
     out = await sharp(input, { failOn: 'none' })
-      .rotate() // honor EXIF orientation
+      // Resize BEFORE rotating. Calling .rotate() first makes libvips decode
+      // the JPEG at full resolution instead of shrinking on load: measured
+      // 531ms vs 145ms per portrait-orientation shot. This is only equivalent
+      // because the fit box is SQUARE (width === height), so rotating the
+      // resized image gives the same result as rotating the original. If the
+      // box ever becomes non-square, .rotate() must move back above .resize().
       .resize({ width, height: width, fit: 'inside', withoutEnlargement: true })
+      .rotate() // honor EXIF orientation
       .withIccProfile('srgb') // convert wide-gamut (Adobe RGB etc.) sources to sRGB so previews match originals
       .webp({ quality })
       .toBuffer();
@@ -567,6 +581,35 @@ async function generateRendition(
   await fs.writeFile(tmp, out);
   await fs.rename(tmp, cacheFile);
   return { data: out, type: 'image/webp' };
+}
+
+/**
+ * Pre-generate the grid thumbnail for one freshly ingested photo, so the folder
+ * is already warm the first time it's opened. Runs on the background lane and
+ * returns immediately: never on the critical path of an FTP transfer, and never
+ * ahead of a live request. Best-effort — anything that fails here is rendered on
+ * demand later, exactly as before.
+ */
+export function warmThumb(relPosix: string): void {
+  void (async () => {
+    let file: string;
+    try {
+      file = safeResolve(relPosix);
+    } catch {
+      return; // outside the share
+    }
+    if (!kindOf(path.basename(file))) return; // not a photo we can render
+    const stat = await fs.stat(file).catch(() => null);
+    if (!stat?.isFile()) return;
+
+    const key = renditionKey(file, stat, 'thumb');
+    const cacheFile = cachePathFor(key);
+    // Cheap existence check — don't read the payload we're only trying to avoid
+    // regenerating.
+    if (await fs.stat(cacheFile).catch(() => null)) return;
+
+    warmInBackground(key, () => generateRendition(file, cacheFile, 'thumb'));
+  })();
 }
 
 export const galleryService = {
@@ -1111,11 +1154,8 @@ export const galleryService = {
     });
     if (!stat.isFile()) throw new AppError('Not a file', 400);
 
-    const { width } = SIZES[variant];
-    const key = createHash('sha1')
-      .update(`${file}|${stat.mtimeMs}|${stat.size}|${variant}|${width}|srgb`)
-      .digest('hex');
-    const cacheFile = path.join(config.cacheDir, `${key}.webp`);
+    const key = renditionKey(file, stat, variant);
+    const cacheFile = cachePathFor(key);
 
     // Hits are served straight off disk, unqueued: a warm folder must stay as
     // fast as the filesystem however many tiles the browser asks for at once.

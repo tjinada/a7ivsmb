@@ -5,6 +5,7 @@ import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
 import { captureDate } from '../../utils/captureDate.js';
 import { mkdirShared, relaxSharePerms } from '../../utils/shareFs.js';
+import { warmThumb } from '../gallery/index.js';
 import { getFtpConfig } from './ftp.config.js';
 import type { FtpStatus, TransferEvent, FtpErrorEvent, StrayFile } from '@sonycam/shared';
 
@@ -101,6 +102,10 @@ function record(absPath: string, size: number, ip: string, timing: RecordTiming 
   recent.unshift(evt);
   if (recent.length > MAX_RECENT) recent.pop();
   lastReceived = evt.time;
+  // Generate the grid thumbnail now, while the box is already awake for this
+  // shot, so the folder opens warm instead of rendering everything on first
+  // browse. Fire and forget: see warmThumb.
+  warmThumb(evt.relPath);
   logger.info(`received ${evt.name} (${size} bytes) from ${ip}`, 'FTP');
 }
 

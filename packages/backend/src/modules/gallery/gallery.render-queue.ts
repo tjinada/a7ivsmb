@@ -64,3 +64,60 @@ export function runQueued<T>(key: string, job: () => Promise<T>): Promise<T> {
   inFlight.set(key, p);
   return p;
 }
+
+// ── Background lane ─────────────────────────────────────────────────────────
+//
+// Warm-up work must never delay a live request, so it gets its own slots rather
+// than sharing the live queue: ingesting a card would otherwise put hundreds of
+// jobs in front of the tiles someone is actually looking at.
+
+const bgLimit = config.warmConcurrency;
+
+let bgActive = 0;
+const bgWaiting: (() => void)[] = [];
+
+function acquireBg(): Promise<void> {
+  if (bgActive < bgLimit) {
+    bgActive += 1;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    bgWaiting.push(resolve);
+  });
+}
+
+function releaseBg(): void {
+  const next = bgWaiting.shift();
+  if (next) next();
+  else bgActive -= 1;
+}
+
+/**
+ * Queue best-effort warm-up work. Fire and forget: errors are swallowed,
+ * because anything that fails to pre-render is simply rendered on demand later
+ * (and fails visibly there, if it is genuinely broken).
+ *
+ * A background job joins the dedupe map only once it actually starts, so a live
+ * request for a key still sitting in the warm backlog runs straight away in the
+ * live lane instead of inheriting the backlog's wait.
+ */
+export function warmInBackground(key: string, job: () => Promise<unknown>): void {
+  if (bgLimit <= 0) return; // warming disabled
+  void (async () => {
+    await acquireBg();
+    try {
+      if (inFlight.has(key)) return; // a live request beat us to it
+      const p = job();
+      inFlight.set(key, p);
+      try {
+        await p;
+      } finally {
+        inFlight.delete(key);
+      }
+    } catch {
+      /* best-effort: on-demand rendering remains the fallback */
+    } finally {
+      releaseBg();
+    }
+  })();
+}

@@ -47,6 +47,14 @@ export const config = {
   // visibly queue up; lower it if the box gets sluggish while browsing.
   renderConcurrency: Math.max(1, Number(process.env.RENDER_CONCURRENCY) || 3),
 
+  // Background warm-up lane: how many freshly ingested photos get their grid
+  // thumbnail pre-generated at once. Separate from renderConcurrency so warming
+  // can never delay a live request, and small so a card dump doesn't monopolise
+  // the box while it files. Set WARM_CONCURRENCY=0 to disable ingest warming.
+  warmConcurrency: Number.isFinite(Number(process.env.WARM_CONCURRENCY))
+    ? Math.max(0, Number(process.env.WARM_CONCURRENCY))
+    : 1,
+
   // Disk cache for generated thumbnails/previews (Phase 3).
   cacheDir: path.resolve(process.env.THUMB_CACHE_PATH ?? `${process.env.DATA_DIR ?? './data'}/thumbnails`),
 
