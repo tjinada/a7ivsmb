@@ -184,12 +184,6 @@ export function CullPage() {
         {current && idx !== null && idx < total - 1 && (
           <NavBtn side="right" onClick={() => step(1)}><ChevronRight className="h-6 w-6" /></NavBtn>
         )}
-        {current && (
-          <span className="pointer-events-none absolute inset-x-0 bottom-3 text-center text-xs text-gray-600">
-            <span className="sm:hidden">Swipe up for ★5 · down to reject · sideways to move</span>
-            <span className="hidden sm:inline">Keys 1–5 rate · X rejects · ←/→ move · Esc exits</span>
-          </span>
-        )}
       </div>
 
       {/* Rating row */}
@@ -210,13 +204,16 @@ export function CullPage() {
               <span className="text-[11px] font-bold">5</span>
             </RateBtn>
           </div>
-          <div className="flex items-center justify-between text-xs text-gray-400">
-            <span>Rated photos advance automatically</span>
+          <div className="flex items-center justify-between gap-3 text-xs text-gray-400">
+            <span className="min-w-0 truncate">
+              <span className="sm:hidden">Swipe up ★5 · down rejects · sideways moves</span>
+              <span className="hidden sm:inline">Rating advances to the next photo · keys 1–5 rate · X rejects · ←/→ move · Esc exits</span>
+            </span>
             <button
               type="button"
               onClick={() => setConfirmDelete(true)}
               disabled={rejectedItems.length === 0}
-              className="flex h-8 items-center gap-1.5 rounded-full border border-border-strong px-3 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 disabled:opacity-40"
+              className="flex h-8 flex-none items-center gap-1.5 rounded-full border border-border-strong px-3 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 disabled:opacity-40"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Delete {rejectedItems.length} rejected
@@ -341,15 +338,18 @@ function RateBtn({ onClick, label, active, tone, wide, children }: {
   wide?: boolean;
   children: React.ReactNode;
 }) {
-  const base = 'flex h-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl transition active:scale-95';
-  const look =
-    tone === 'primary'
-      ? 'bg-primary-500 text-on-accent hover:bg-primary-400'
-      : tone === 'danger'
-        ? `border bg-surface text-red-400 hover:bg-red-500/10 ${active ? 'border-red-400' : 'border-border-strong'}`
-        : `border bg-surface text-gray-100 hover:bg-border ${active ? 'border-primary-500' : 'border-border-strong'}`;
+  // Every button is neutral until it matches the photo's current rating; only
+  // that one is filled, so the row always reads as "this is what it's rated".
+  const base = 'flex h-[60px] flex-col items-center justify-center gap-0.5 rounded-2xl border transition active:scale-95';
+  const look = active
+    ? tone === 'primary' ? 'border-primary-500 bg-primary-500 text-on-accent'
+      : tone === 'danger' ? 'border-red-500 bg-red-500 text-white'
+        : 'border-gray-100 bg-gray-100 text-on-accent'
+    : tone === 'primary' ? 'border-border-strong bg-surface text-primary-400 hover:bg-primary-500/10'
+      : tone === 'danger' ? 'border-border-strong bg-surface text-red-400 hover:bg-red-500/10'
+        : 'border-border-strong bg-surface text-gray-100 hover:bg-border';
   return (
-    <button type="button" onClick={onClick} aria-label={label} aria-pressed={active} className={`${base} ${look} ${wide ? 'flex-[1.3]' : 'flex-1'} ${tone === 'primary' && active ? 'ring-2 ring-primary-300' : ''}`}>
+    <button type="button" onClick={onClick} aria-label={label} aria-pressed={active} className={`${base} ${look} ${wide ? 'flex-[1.3]' : 'flex-1'}`}>
       {children}
     </button>
   );
