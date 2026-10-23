@@ -40,6 +40,9 @@ export function useAlbumPanel(albumPath: string, shares: ShareSummary[]) {
   const selectedRaw = useBrowse(rawKey, useRaw, { retry: false });
   const selected = useRaw ? selectedRaw : selectedJpg;
   const selectedKey = useRaw ? rawKey : jpgKey;
+  // An album filled straight from Lightroom has no Selected/ at all: it has
+  // edits, not copied originals, so "shots" is meaningless there.
+  const hasSelected = enabled && !!selected.data;
   const share = shares.find((s) => s.kind !== 'delivery') ?? shares[0];
   const editedItems = edited.data?.items ?? [];
   const allItems = selected.data?.items ?? [];
@@ -63,6 +66,7 @@ export function useAlbumPanel(albumPath: string, shares: ShareSummary[]) {
     activeKey: keys.browse(effectiveTab === 'all' ? selectedKey : editedKey),
     loading: enabled && (edited.isLoading || selected.isLoading),
     counts: { picks: finalSet.size, shortlist: shortSet.size, edited: editedItems.length, all: allItems.length },
+    hasSelected,
     share,
     editedNames: new Set(editedItems.map((i) => i.name)),
     refetch: () => { void edited.refetch(); void selected.refetch(); },
@@ -100,7 +104,7 @@ export function AlbumPanel({
   return (
     <div className="mb-4 space-y-3">
       <div className="grid grid-cols-3 gap-2">
-        <Stat value={String(counts.all)} label="shots" />
+        <Stat value={panel.hasSelected ? String(counts.all) : '—'} label={panel.hasSelected ? 'shots' : 'no originals'} />
         <Stat value={String(counts.edited)} label="edited" />
         <div className={`rounded-xl border p-3 ${phaseTile.hot ? 'border-primary-500 bg-primary-500/10' : 'border-border bg-surface'}`}>
           <p className={`text-sm font-semibold leading-tight ${phaseTile.hot ? 'text-primary-400' : 'text-gray-100'}`}>{phaseTile.label}</p>
@@ -159,7 +163,7 @@ export function AlbumPanel({
         {proofing && <Pill on={tab === 'picks'} onClick={() => setTab('picks')}>Picks · {counts.picks}</Pill>}
         {proofing && <Pill on={tab === 'shortlist'} onClick={() => setTab('shortlist')}>Shortlist · {counts.shortlist}</Pill>}
         <Pill on={tab === 'edited'} onClick={() => setTab('edited')}>Edited · {counts.edited}</Pill>
-        <Pill on={tab === 'all'} onClick={() => setTab('all')}>All · {counts.all}</Pill>
+        {panel.hasSelected && <Pill on={tab === 'all'} onClick={() => setTab('all')}>All · {counts.all}</Pill>}
       </div>
     </div>
   );
