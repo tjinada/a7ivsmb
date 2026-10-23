@@ -193,7 +193,10 @@ export function GalleryPage() {
 
   // ── Overflow menu ───────────────────────────────────────────────────────
   const menu: MenuAction[] = [];
-  if (isHomeDateFolder && allItems.length > 0) {
+  // A dated folder holds its shots in JPG/ and RAW/ subfolders, so "has
+  // photos" means photos here or in either bucket.
+  const hasShots = allItems.length > 0 || folders.some((f) => /^(JPG|RAW)$/i.test(f.name) && (f.count ?? 0) > 0);
+  if (isHomeDateFolder && hasShots) {
     menu.push({ id: 'cull', label: 'Cull this folder', icon: MenuIcons.cull, onSelect: () => navigate(`/cull?path=${encodeURIComponent(path)}`) });
   }
   if (isAlbumRoot) {
