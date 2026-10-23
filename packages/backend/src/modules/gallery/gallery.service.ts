@@ -243,6 +243,28 @@ async function extractRawPreview(file: string): Promise<Buffer> {
   throw new AppError('No embedded preview in this RAW file', 415);
 }
 
+/** The RAW file's EXIF Orientation (1–8), or 1 if unknown. The embedded
+ *  preview carries no orientation of its own, so a portrait shot's preview
+ *  is stored sideways and needs this applied. */
+function rawOrientation(file: string): Promise<number> {
+  return new Promise((resolve) => {
+    execFile(config.exiftoolPath, ['-s3', '-n', '-Orientation', file], { timeout: 15000 }, (err, stdout) => {
+      const n = err ? NaN : parseInt(String(stdout).trim(), 10);
+      resolve(n >= 1 && n <= 8 ? n : 1);
+    });
+  });
+}
+
+/** Apply an EXIF orientation value explicitly (for inputs whose own metadata
+ *  doesn't carry it). Mirrored values (2/4/5/7) are rare on cameras but
+ *  handled: rotate, then flop. */
+function orient(img: sharp.Sharp, o: number): sharp.Sharp {
+  const turn = { 3: 180, 4: 180, 5: 90, 6: 90, 7: 270, 8: 270 }[o] ?? 0;
+  let out = turn ? img.rotate(turn) : img;
+  if (o === 2 || o === 4 || o === 5 || o === 7) out = out.flop();
+  return out;
+}
+
 /** Resolve a share-relative path (file or dir) and keep it inside the share. */
 function safeResolve(rel: string): string {
   const root = path.resolve(config.photosPath);
@@ -258,8 +280,11 @@ function safeResolve(rel: string): string {
  *  the key, so an edited file naturally lands on a fresh entry. */
 function renditionKey(file: string, stat: { mtimeMs: number; size: number }, variant: Variant): string {
   const { width } = SIZES[variant];
+  // RAW renditions gained their orientation fix later: a new key makes the
+  // old sideways ones regenerate. JPG keys are unchanged (their cache stays).
+  const raw = RAW.has(path.extname(file).toLowerCase()) ? '|orient' : '';
   return createHash('sha1')
-    .update(`${file}|${stat.mtimeMs}|${stat.size}|${variant}|${width}|srgb`)
+    .update(`${file}|${stat.mtimeMs}|${stat.size}|${variant}|${width}|srgb${raw}`)
     .digest('hex');
 }
 
@@ -563,19 +588,25 @@ async function generateRendition(
   // RAW files can't be decoded by sharp directly; use the camera's embedded
   // JPEG preview instead. (Throws 415 here if there's no usable preview.)
   const ext = path.extname(file).toLowerCase();
-  const input: string | Buffer = RAW.has(ext) ? await extractRawPreview(file) : file;
+  const isRaw = RAW.has(ext);
+  const [input, rawOrient] = isRaw
+    ? await Promise.all([extractRawPreview(file), rawOrientation(file)])
+    : [file, 0];
 
   let out: Buffer;
   try {
-    out = await sharp(input, { failOn: 'none' })
-      // Resize BEFORE rotating. Calling .rotate() first makes libvips decode
-      // the JPEG at full resolution instead of shrinking on load: measured
-      // 531ms vs 145ms per portrait-orientation shot. This is only equivalent
-      // because the fit box is SQUARE (width === height), so rotating the
-      // resized image gives the same result as rotating the original. If the
-      // box ever becomes non-square, .rotate() must move back above .resize().
-      .resize({ width, height: width, fit: 'inside', withoutEnlargement: true })
-      .rotate() // honor EXIF orientation
+    // Resize BEFORE rotating. Calling .rotate() first makes libvips decode
+    // the JPEG at full resolution instead of shrinking on load: measured
+    // 531ms vs 145ms per portrait-orientation shot. This is only equivalent
+    // because the fit box is SQUARE (width === height), so rotating the
+    // resized image gives the same result as rotating the original. If the
+    // box ever becomes non-square, the rotation must move back above .resize().
+    const resized = sharp(input, { failOn: 'none' })
+      .resize({ width, height: width, fit: 'inside', withoutEnlargement: true });
+    // JPG etc.: honor the file's own EXIF orientation. RAW: the preview has
+    // none, so apply the orientation read from the RAW itself.
+    const oriented = isRaw ? orient(resized, rawOrient) : resized.rotate();
+    out = await oriented
       .withIccProfile('srgb') // convert wide-gamut (Adobe RGB etc.) sources to sRGB so previews match originals
       .webp({ quality })
       .toBuffer();

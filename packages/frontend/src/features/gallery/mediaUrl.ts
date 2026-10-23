@@ -12,7 +12,8 @@
  * Omit it where no mtime is at hand (folder covers, the transfers list) and the
  * response falls back to a one-day expiry. The backend ignores both params.
  */
-export const RENDER_VERSION = 2;
+// 3: RAW previews are now rotated by the RAW's own EXIF orientation.
+export const RENDER_VERSION = 3;
 
 function renditionUrl(kind: 'thumb' | 'preview', path: string, version?: number): string {
   const v = version === undefined ? '' : `&v=${Math.floor(version)}`;
