@@ -30,17 +30,27 @@ export function useAlbumPanel(albumPath: string, shares: ShareSummary[]) {
   const [tab, setTab] = useState<AlbumTab>('all');
   const enabled = albumPath !== '';
   const editedKey = `${albumPath}/Edited`;
-  const selectedKey = `${albumPath}/Selected/JPG`;
-  const edited = useBrowse(editedKey, enabled);
-  const selected = useBrowse(selectedKey, enabled);
+  // Albums copy into Selected/JPG and/or Selected/RAW depending on the formats
+  // chosen at creation. Read JPG; if that bucket doesn't exist, read RAW.
+  const jpgKey = `${albumPath}/Selected/JPG`;
+  const rawKey = `${albumPath}/Selected/RAW`;
+  const edited = useBrowse(editedKey, enabled, { retry: false });
+  const selectedJpg = useBrowse(jpgKey, enabled, { retry: false });
+  const useRaw = enabled && selectedJpg.isError;
+  const selectedRaw = useBrowse(rawKey, useRaw, { retry: false });
+  const selected = useRaw ? selectedRaw : selectedJpg;
+  const selectedKey = useRaw ? rawKey : jpgKey;
   const share = shares.find((s) => s.kind !== 'delivery') ?? shares[0];
   const editedItems = edited.data?.items ?? [];
   const allItems = selected.data?.items ?? [];
   const finalSet = new Set(share?.final ?? []);
   const shortSet = new Set(share?.selections ?? []);
 
-  // Picks and shortlist only exist once a client has a proofing link.
-  const effectiveTab: AlbumTab = share && share.kind !== 'delivery' ? tab : tab === 'picks' || tab === 'shortlist' ? 'all' : tab;
+  // Picks and shortlist only exist once a client has a proofing link. An album
+  // with nothing in Selected/ but edits in Edited/ opens on the edits.
+  const hasProofing = !!share && share.kind !== 'delivery';
+  const requested: AlbumTab = hasProofing ? tab : tab === 'picks' || tab === 'shortlist' ? 'all' : tab;
+  const effectiveTab: AlbumTab = requested === 'all' && allItems.length === 0 && editedItems.length > 0 ? 'edited' : requested;
   const items: GalleryItem[] =
     effectiveTab === 'picks' ? editedItems.filter((i) => finalSet.has(i.name))
       : effectiveTab === 'shortlist' ? editedItems.filter((i) => shortSet.has(i.name))

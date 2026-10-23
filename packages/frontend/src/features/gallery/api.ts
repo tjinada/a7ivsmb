@@ -46,8 +46,8 @@ export const keys = {
 
 // ── Queries ─────────────────────────────────────────────────────────────────
 
-export function useBrowse(path: string, enabled = true) {
-  return useQuery({ queryKey: keys.browse(path), queryFn: () => browse(path), enabled });
+export function useBrowse(path: string, enabled = true, opts: { retry?: boolean } = {}) {
+  return useQuery({ queryKey: keys.browse(path), queryFn: () => browse(path), enabled, retry: opts.retry ?? 3 });
 }
 
 export function useTimeline(enabled = true) {

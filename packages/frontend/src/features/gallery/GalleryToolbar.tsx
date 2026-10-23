@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   Folder, ChevronRight, RefreshCw, Home, CheckSquare, MoreVertical, CalendarDays,
-  FolderPlus, Trash2, Pencil, CalendarClock,
+  FolderPlus, Trash2, Pencil, CalendarClock, Star,
 } from 'lucide-react';
 import { prettyDate } from '@/lib/dates';
 
@@ -145,4 +145,5 @@ export const MenuIcons = {
   trash: <Trash2 className="h-4 w-4" />,
   album: <FolderPlus className="h-4 w-4 text-primary-500" />,
   backfill: <CalendarClock className="h-4 w-4 text-primary-500" />,
+  cull: <Star className="h-4 w-4 text-primary-500" />,
 };

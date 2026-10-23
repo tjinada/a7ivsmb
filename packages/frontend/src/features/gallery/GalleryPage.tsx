@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Images } from 'lucide-react';
 import type { GalleryItem, AlbumFormats } from '@sonycam/shared';
@@ -35,6 +35,7 @@ export function GalleryPage() {
   // history entry: Android's back gesture walks up folders instead of
   // closing the PWA, and reloads keep the user in the same folder.
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const path = searchParams.get('path') ?? '';
   const setPath = (p: string) => setSearchParams(p ? { path: p } : {});
 
@@ -192,6 +193,9 @@ export function GalleryPage() {
 
   // ── Overflow menu ───────────────────────────────────────────────────────
   const menu: MenuAction[] = [];
+  if (isHomeDateFolder && allItems.length > 0) {
+    menu.push({ id: 'cull', label: 'Cull this folder', icon: MenuIcons.cull, onSelect: () => navigate(`/cull?path=${encodeURIComponent(path)}`) });
+  }
   if (isAlbumRoot) {
     menu.push({ id: 'rename', label: 'Rename album…', icon: MenuIcons.rename, onSelect: () => open({ kind: 'rename' }) });
     menu.push({ id: 'deleteAlbum', label: 'Delete album…', icon: MenuIcons.trash, danger: true, onSelect: () => open({ kind: 'deleteAlbum' }) });
