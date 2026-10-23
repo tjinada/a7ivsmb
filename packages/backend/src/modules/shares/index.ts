@@ -3,7 +3,7 @@ import { logger } from '../../utils/logger.js';
 import type { ShareKind } from '@sonycam/shared';
 
 export { ownerShareRoutes, publicShareRoutes } from './shares.routes.js';
-export { renderSharePage, renderInactivePage } from './sharePage.js';
+export { renderSharePage, renderInactivePage, SHARE_ASSETS_DIR } from './sharePage.js';
 export { ogCardPng } from './ogCard.js';
 export { albumHasShares, loadShares, anyShareUnder } from './shares.store.js';
 export { isValidSlug } from './shares.auth.js';

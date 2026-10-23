@@ -38,9 +38,27 @@ function previewsDirFor(id: string): string {
   return path.join(config.dataDir, 'shares', id, 'previews');
 }
 
+/** Absolute path to a share's grid-thumbnail folder on disk. */
+function thumbsDirFor(id: string): string {
+  return path.join(config.dataDir, 'shares', id, 'thumbs');
+}
+
 /** Preview file (webp) basename for an original edited filename. */
 function previewNameFor(file: string): string {
   return `${path.parse(file).name}.webp`;
+}
+
+type Dims = { w: number; h: number };
+type Rendered = { name: string; dims: Dims };
+
+/** Write the grid thumbnail for one item from its (already resized, already
+ *  watermarked) preview buffer. Cheap: the preview is at most 1600 px. */
+async function writeThumb(previewBuf: Buffer, out: string): Promise<void> {
+  const edge = config.shares.thumbMaxEdge;
+  await sharp(previewBuf)
+    .resize({ width: edge, height: edge, fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 72 })
+    .toFile(out);
 }
 
 /** Public client link for a share. Absolute when SHARE_HOST is configured (so
@@ -135,12 +153,15 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 /** Regenerate the watermarked preview set for a share from its album's Edited/.
  *  When a progressId is supplied, done/total counts are published for the
  *  owner UI to poll; the entry lives exactly as long as this function runs. */
-async function generatePreviews(id: string, albumPath: string, progressId?: string, watermark = true): Promise<string[]> {
+async function generatePreviews(id: string, albumPath: string, progressId?: string, watermark = true): Promise<Rendered[]> {
   const items = await listEditedJpgs(albumPath);
   const dir = previewsDirFor(id);
+  const tdir = thumbsDirFor(id);
   await fs.rm(dir, { recursive: true, force: true });
+  await fs.rm(tdir, { recursive: true, force: true });
   await fs.mkdir(dir, { recursive: true });
-  if (items.length === 0) return items;
+  await fs.mkdir(tdir, { recursive: true });
+  if (items.length === 0) return [];
 
   const editedDir = path.join(safeAlbumDir(albumPath), EDITED_DIR);
   const { previewMaxEdge, previewQuality } = config.shares;
@@ -163,18 +184,20 @@ async function generatePreviews(id: string, albumPath: string, progressId?: stri
           .resize({ width: previewMaxEdge, height: previewMaxEdge, fit: 'inside', withoutEnlargement: true })
           .withIccProfile('srgb') // convert wide-gamut (Adobe RGB etc.) exports to sRGB before compositing
           .toBuffer({ resolveWithObject: true });
-        await sharp(resized.data)
+        const preview = await sharp(resized.data)
           .composite(watermark ? [{ input: watermarkSvg(resized.info.width, resized.info.height) }] : [])
           .webp({ quality: previewQuality })
-          .toFile(out);
-        return name;
+          .toBuffer();
+        await fs.writeFile(out, preview);
+        await writeThumb(preview, path.join(tdir, previewNameFor(name)));
+        return { name, dims: { w: resized.info.width, h: resized.info.height } };
       } catch {
         return null; // sharp couldn't decode it; it just won't appear as a preview
       } finally {
         if (progressId) progressTick(progressId); // counts processed, not just succeeded
       }
     });
-    return results.filter((n): n is string => n !== null);
+    return results.filter((r): r is Rendered => r !== null);
   } finally {
     if (progressId) progressEnd(progressId);
   }
@@ -206,18 +229,71 @@ function requireBySlug(slug: string): ShareRecord {
   return rec;
 }
 
+/** Turn a rendered list into the record's dims map. */
+function dimsOf(rendered: Rendered[]): Record<string, Dims> {
+  return Object.fromEntries(rendered.map((r) => [r.name, r.dims]));
+}
+
 /** Build the client-facing state for a share (no secrets, this share only). */
-function toPublicState(rec: ShareRecord): SharePublicState {
+function toPublicState(rec: ShareRecord, downloadBytes?: number): SharePublicState {
   const picked = new Set(rec.selections);
-  const items: SharePublicItem[] = rec.items.map((file) => ({ file, selected: picked.has(file) }));
+  const dims = rec.dims ?? {};
+  const items: SharePublicItem[] = rec.items.map((file) => ({
+    file,
+    selected: picked.has(file),
+    w: dims[file]?.w ?? 0,
+    h: dims[file]?.h ?? 0,
+  }));
   return {
     albumName: rec.albumName,
+    brandName: config.shares.brandName,
+    whatsNext: config.shares.whatsNext,
     kind: kindOf(rec),
     phase: rec.phase,
     cap: rec.cap,
     selectedCount: rec.selections.length,
     items,
+    ...(downloadBytes !== undefined ? { downloadBytes } : {}),
   };
+}
+
+/** Records written before Phase 7 have no dims. Read them once from the
+ *  preview files and persist, so the client page can lay out justified rows
+ *  without a forced refresh. Returns the (possibly updated) record. */
+async function ensureDims(rec: ShareRecord): Promise<ShareRecord> {
+  const dims = { ...(rec.dims ?? {}) };
+  const missing = rec.items.filter((f) => !dims[f]);
+  if (missing.length === 0) return rec;
+  for (const file of missing) {
+    try {
+      const meta = await sharp(path.join(previewsDirFor(rec.id), previewNameFor(file))).metadata();
+      if (meta.width && meta.height) dims[file] = { w: meta.width, h: meta.height };
+    } catch {
+      /* preview missing; stays 0x0 and the page treats it as 3:2 */
+    }
+  }
+  const next: ShareRecord = { ...rec, dims };
+  await putShare(next);
+  return next;
+}
+
+/** Sum the sizes of the originals the client may download (delivery phase). */
+async function downloadBytesFor(rec: ShareRecord): Promise<number> {
+  const editedDir = path.join(safeAlbumDir(rec.albumPath), EDITED_DIR);
+  const wanted = kindOf(rec) === 'delivery' ? rec.items : rec.selections;
+  let total = 0;
+  for (const file of wanted) {
+    const stat = await fs.stat(path.join(editedDir, file)).catch(() => null);
+    if (stat?.isFile()) total += stat.size;
+  }
+  return total;
+}
+
+/** Client-facing state, with lazy dims backfill and the delivery size. */
+async function publicStateFor(rec: ShareRecord): Promise<SharePublicState> {
+  const withDims = await ensureDims(rec);
+  const bytes = withDims.phase === 'delivery' ? await downloadBytesFor(withDims) : undefined;
+  return toPublicState(withDims, bytes);
 }
 
 export const sharesService = {
@@ -243,8 +319,9 @@ export const sharesService = {
     }
 
     const id = newId();
-    const items = await generatePreviews(id, albumPath, progressId, !isDelivery);
-    if (items.length === 0) throw new AppError('Could not generate any previews', 500);
+    const rendered = await generatePreviews(id, albumPath, progressId, !isDelivery);
+    if (rendered.length === 0) throw new AppError('Could not generate any previews', 500);
+    const items = rendered.map((r) => r.name);
 
     const { salt, hash } = await hashPassword(password);
     const rec: ShareRecord = {
@@ -258,6 +335,7 @@ export const sharesService = {
       passwordHash: hash,
       phase: isDelivery ? 'delivery' : 'proofing',
       items,
+      dims: dimsOf(rendered),
       selections: [],
       createdAt: Date.now(),
       submittedAt: null,
@@ -294,12 +372,14 @@ export const sharesService = {
     await loadShares();
     const rec = getShareById(id);
     if (!rec) throw new AppError('Share not found', 404);
-    const items = await generatePreviews(rec.id, rec.albumPath, progressId, kindOf(rec) !== 'delivery');
-    if (items.length === 0) throw new AppError('No edited JPGs to publish', 400);
+    const rendered = await generatePreviews(rec.id, rec.albumPath, progressId, kindOf(rec) !== 'delivery');
+    if (rendered.length === 0) throw new AppError('No edited JPGs to publish', 400);
+    const items = rendered.map((r) => r.name);
     const keep = new Set(items);
     const next: ShareRecord = {
       ...rec,
       items,
+      dims: dimsOf(rendered),
       selections: rec.selections.filter((f) => keep.has(f)),
     };
     await putShare(next);
@@ -328,7 +408,7 @@ export const sharesService = {
   /** Client-facing state (after the cookie gate). */
   async publicState(slug: string): Promise<SharePublicState> {
     await loadShares();
-    return toPublicState(requireBySlug(slug));
+    return publicStateFor(requireBySlug(slug));
   },
 
   /** Replace the client's selection set. Proofing only; cap enforced. */
@@ -354,7 +434,7 @@ export const sharesService = {
     }
     const next: ShareRecord = { ...rec, selections: picked };
     await putShare(next);
-    return toPublicState(next);
+    return publicStateFor(next);
   },
 
   /** Lock the client's picks. Proofing -> submitted; needs at least one pick. */
@@ -372,7 +452,32 @@ export const sharesService = {
     }
     const next: ShareRecord = { ...rec, phase: 'submitted', submittedAt: Date.now() };
     await putShare(next);
-    return toPublicState(next);
+    return publicStateFor(next);
+  },
+
+  /** Serve the grid thumbnail (webp) for one item. Shares created before
+   *  Phase 7 have no thumbs folder: the thumb is cut from the preview on first
+   *  miss and written back, so old links keep working with no refresh. */
+  async thumb(slug: string, file: string): Promise<{ data: Buffer; type: string }> {
+    await loadShares();
+    const rec = requireBySlug(slug);
+    assertPlainFilename(file);
+    if (!rec.items.includes(file)) throw new AppError('Not found', 404);
+    const abs = path.join(thumbsDirFor(rec.id), previewNameFor(file));
+    try {
+      return { data: await fs.readFile(abs), type: 'image/webp' };
+    } catch {
+      /* fall through: build it from the preview */
+    }
+    let preview: Buffer;
+    try {
+      preview = await fs.readFile(path.join(previewsDirFor(rec.id), previewNameFor(file)));
+    } catch {
+      throw new AppError('Preview not found', 404);
+    }
+    await fs.mkdir(thumbsDirFor(rec.id), { recursive: true });
+    await writeThumb(preview, abs);
+    return { data: await fs.readFile(abs), type: 'image/webp' };
   },
 
   /** Serve a watermarked preview (webp) for one item. Must be a known item. */

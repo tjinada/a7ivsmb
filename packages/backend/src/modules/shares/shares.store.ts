@@ -18,6 +18,9 @@ export interface ShareRecord {
   passwordHash: string;     // hex (scrypt)
   phase: SharePhase;
   items: string[];          // edited JPG filenames published as previews
+  /** Preview pixel size per item, keyed by filename. Absent on records
+   *  written before Phase 7; backfilled lazily from the preview files. */
+  dims?: Record<string, { w: number; h: number }>;
   selections: string[];     // client's picks (subset of items)
   createdAt: number;        // epoch ms
   submittedAt: number | null;

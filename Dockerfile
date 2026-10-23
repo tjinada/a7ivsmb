@@ -40,6 +40,9 @@ RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
+# Client share page (HTML templates + CSS/JS/fonts), read at runtime from
+# packages/backend/client — not part of the tsc build output.
+COPY --from=builder /app/packages/backend/client ./packages/backend/client
 COPY --from=builder /app/packages/frontend/dist ./packages/frontend/dist
 
 ENV NODE_ENV=production

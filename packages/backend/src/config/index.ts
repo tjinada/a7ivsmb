@@ -86,6 +86,14 @@ export const config = {
     previewQuality: Number(process.env.SHARE_PREVIEW_QUALITY ?? 80),
     watermarkText: process.env.SHARE_WATERMARK_TEXT ?? 'Preview',
     cookieTtlDays: Number(process.env.SHARE_COOKIE_TTL_DAYS ?? 7),
+    // Who the client page says the gallery is from, and what it tells them
+    // after they submit their favourites. Plain text; the page escapes it.
+    brandName: (process.env.SHARE_BRAND_NAME ?? '').trim() || 'Your photographer',
+    whatsNext:
+      (process.env.SHARE_WHATS_NEXT ?? '').trim() ||
+      "Thank you! I'll edit the photos you chose and send you a message when they're ready. You'll download them from this same link, so keep it handy.",
+    // Grid thumbnail size (long edge) for the client page.
+    thumbMaxEdge: Number(process.env.SHARE_THUMB_MAX_EDGE ?? 480),
   },
 } as const;
 

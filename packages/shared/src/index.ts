@@ -253,15 +253,20 @@ export interface ShareProgress {
 export interface SharePublicItem {
   file: string;             // original edited filename; id for select/download
   selected: boolean;
+  w: number;                // preview pixel width  (0 if unknown)
+  h: number;                // preview pixel height (0 if unknown)
 }
 
 /** Client-facing state returned by GET /api/public/share/:slug/list.
  *  Carries nothing about other shares and no secrets. */
 export interface SharePublicState {
   albumName: string;
+  brandName: string;        // SHARE_BRAND_NAME; who the gallery is from
+  whatsNext: string;        // SHARE_WHATS_NEXT; shown after the client submits
   kind: ShareKind;
   phase: SharePhase;
   cap: number;
   selectedCount: number;
   items: SharePublicItem[];
+  downloadBytes?: number;   // delivery phase: total size of the downloadable originals
 }

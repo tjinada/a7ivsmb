@@ -34,6 +34,7 @@ owner.delete('/:id', requireAuth, sharesController.revoke);
 const pub: Router = Router();
 pub.post('/:slug/auth', validSlug, loginRateLimit, sharesController.auth);
 pub.get('/:slug/list', validSlug, requireShareAuth, sharesController.state);
+pub.get('/:slug/thumb/:file', validSlug, requireShareAuth, sharesController.thumb);
 pub.get('/:slug/preview/:file', validSlug, requireShareAuth, sharesController.preview);
 pub.post('/:slug/select', validSlug, requireShareAuth, sharesController.select);
 pub.post('/:slug/submit', validSlug, requireShareAuth, sharesController.submit);

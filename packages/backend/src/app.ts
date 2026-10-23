@@ -13,7 +13,7 @@ import { logger } from './utils/logger.js';
 import { authRoutes } from './modules/auth/index.js';
 import { ftpRoutes, initFtp } from './modules/ftp/index.js';
 import { galleryRoutes } from './modules/gallery/index.js';
-import { ownerShareRoutes, publicShareRoutes, renderSharePage, renderInactivePage, sharePageMeta, ogCardPng, initShares, isValidSlug } from './modules/shares/index.js';
+import { ownerShareRoutes, publicShareRoutes, renderSharePage, renderInactivePage, sharePageMeta, ogCardPng, initShares, isValidSlug, SHARE_ASSETS_DIR } from './modules/shares/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -64,14 +64,24 @@ app.get('/s/:slug', async (req, res, next) => {
     // rather than a password gate that can never be unlocked.
     const meta = await sharePageMeta(req.params.slug);
     if (!meta) {
-      res.status(404).type('html').send(renderInactivePage());
+      res.status(404).type('html').send(await renderInactivePage());
       return;
     }
-    res.type('html').send(renderSharePage(req.params.slug, meta));
+    res.type('html').send(await renderSharePage(req.params.slug, meta));
   } catch (err) {
     next(err);
   }
 });
+
+// The client page's stylesheet, script and font. Public on every host like
+// /og.png (nothing gallery-specific in them); URLs carry ?v=<start stamp>, so
+// a long immutable cache is safe. Only the assets/ folder is served — the HTML
+// templates beside it are never reachable raw.
+app.use('/share-assets', express.static(SHARE_ASSETS_DIR, {
+  index: false,
+  maxAge: config.isProduction ? '30d' : 0,
+  immutable: config.isProduction,
+}));
 
 // Generic branded card for link unfurls. Public on every host by design: chat
 // scrapers fetch it without the share password, and it contains nothing about

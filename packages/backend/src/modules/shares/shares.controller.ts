@@ -124,6 +124,17 @@ export const sharesController = {
     }
   },
 
+  async thumb(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { data, type } = await sharesService.thumb(req.params.slug, req.params.file);
+      res.set('Content-Type', type);
+      res.set('Cache-Control', 'private, max-age=86400');
+      res.send(data);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async preview(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { data, type } = await sharesService.preview(req.params.slug, req.params.file);
