@@ -333,14 +333,25 @@
 
   function shortlistCtaHtml() {
     return '<div class="prog"><span class="lbl"><span data-favcount>' + favs.size + '</span> shortlisted</span>'
-      + '<span class="sub2">You’ll choose ' + state.cap + ' of these to send</span></div>'
-      + '<button type="button" class="btn primary" data-next>Choose final ' + state.cap + '</button>';
+      + '<span class="sub2" data-favsub></span></div>'
+      + '<button type="button" class="btn primary" data-next></button>';
   }
 
+  /** Over the cap the next step is a real choice; at or under it, it's a
+   *  review with everything pre-chosen, so the copy says so. */
   function updateShortlistCounts() {
     const n = favs.size;
+    const over = n > state.cap;
     document.querySelectorAll('[data-favcount]').forEach((x) => { x.textContent = n; });
-    document.querySelectorAll('[data-next]').forEach((b) => { b.disabled = n === 0; });
+    document.querySelectorAll('[data-favsub]').forEach((x) => {
+      x.textContent = over
+        ? 'You’ll choose ' + state.cap + ' of these to send'
+        : 'Up to ' + state.cap + ' can be sent';
+    });
+    document.querySelectorAll('[data-next]').forEach((b) => {
+      b.disabled = n === 0;
+      b.textContent = over ? 'Choose final ' + state.cap : 'Review & send';
+    });
     Lightbox.sync();
   }
 
@@ -379,9 +390,14 @@
 
   function goFinal() {
     if (favs.size === 0) return;
-    // Make sure the shortlist is saved before the step that depends on it.
+    // At or under the cap with nothing chosen yet, pre-choose the whole
+    // shortlist: the next step is then a review and one tap, not 10 ticks.
+    const prefill = fin.size === 0 && favs.size <= state.cap;
+    if (prefill) favs.forEach((f) => fin.add(f));
+    // Make sure both sets are saved before the step that depends on them.
     flushPersist('/select', favs)
-      .then((res) => { if (res.data) state = res.data; view = 'final'; route(); })
+      .then(() => (prefill ? flushPersist('/final', fin) : null))
+      .then((res) => { if (res && res.data) state = res.data; view = 'final'; route(); })
       .catch((e) => setStatus(e.message, true));
   }
 
@@ -407,12 +423,16 @@
 
   function renderFinal() {
     const short = state.items.filter((it) => favs.has(it.file));
-    const sub = 'From your ' + short.length + ' shortlisted. ' + (COARSE ? 'Tap' : 'Click') + ' a photo to view it, ' + TAP + ' the circle to choose it.';
+    const under = short.length <= state.cap;
+    const title = under ? 'Review & send' : 'Choose your final ' + state.cap;
+    const sub = under
+      ? 'All ' + short.length + ' of your shortlist are chosen. Un-choose any you’d rather not send, then Send.'
+      : 'From your ' + short.length + ' shortlisted. ' + (COARSE ? 'Tap' : 'Click') + ' a photo to view it, ' + TAP + ' the circle to choose it.';
     app.replaceChildren(el(
       '<div class="shell">'
       + header(sub,
         '<button type="button" class="pill wide-only" data-clear>Clear</button><div class="progress">' + finalCtaHtml() + '</div>',
-        { back: true, eyebrow: 'Step 2 of 2 · ' + esc(state.albumName), title: 'Choose your final ' + state.cap })
+        { back: true, eyebrow: 'Step 2 of 2 · ' + esc(state.albumName), title })
       + '<div class="main"><div class="final-prog phone-only">' + finalProgHtml() + '<button type="button" class="pill" data-clear>Clear</button></div>'
       + '<p id="status" class="status above" aria-live="polite"></p>'
       + '<div class="grid" id="grid"></div></div>'
