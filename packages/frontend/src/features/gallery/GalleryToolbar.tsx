@@ -24,7 +24,7 @@ const ICON_BTN = 'flex h-8 w-8 items-center justify-center rounded-lg text-gray-
  */
 export function GalleryToolbar({
   view, onView, path, onPath, selecting, onSelect, onCancelSelect,
-  canSelect, isFetching, onRefresh, menu,
+  canSelect, isFetching, onRefresh, menu, extra,
 }: {
   view: GalleryView;
   onView: (v: GalleryView) => void;
@@ -37,6 +37,8 @@ export function GalleryToolbar({
   isFetching: boolean;
   onRefresh: () => void;
   menu: MenuAction[];
+  /** A page-level primary action shown before the icon buttons. */
+  extra?: ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const isTimeline = view === 'timeline';
@@ -84,6 +86,7 @@ export function GalleryToolbar({
           </button>
         ) : (
           <>
+            {extra}
             {canSelect && (
               <button type="button" onClick={onSelect} aria-label="Select" className={ICON_BTN}>
                 <CheckSquare className="h-4 w-4" />

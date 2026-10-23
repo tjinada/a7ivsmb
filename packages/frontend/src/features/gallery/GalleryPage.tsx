@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2, Images } from 'lucide-react';
+import { Loader2, Images, Play } from 'lucide-react';
 import type { GalleryItem, AlbumFormats } from '@sonycam/shared';
 import { toast } from '@/components/Toast';
 import { dateKey, prettyDate, isDateSegment } from '@/lib/dates';
@@ -28,6 +28,8 @@ import { BackfillDialog } from './BackfillDialog';
 import { DeleteFolderDialog } from './DeleteFolderDialog';
 import { EditedUpload } from './EditedUpload';
 import { shareItems, downloadZip } from './download';
+import { useJobFor, useStartJob } from '@/features/jobs/api';
+import { JobPanel } from '@/features/jobs/JobPanel';
 
 export function GalleryPage() {
   const [view, setView] = useState<GalleryView>('folders');
@@ -68,6 +70,10 @@ export function GalleryPage() {
   const timelineQuery = useTimeline(isTimeline);
   const albumsQuery = useAlbums(dialog.kind === 'album');
   const sharesQuery = useShares(!isTimeline && path.startsWith('Albums'));
+  // The workflow job for this shoot folder or album, if one was started.
+  const jobQuery = useJobFor(isHomeDateFolder || (!isTimeline && isAlbumRoot) ? path : '');
+  const job = jobQuery.data ?? null;
+  const startJobMut = useStartJob({ onError: toast.error });
   const albumShares = (sharesQuery.data ?? []).filter((s) => s.albumPath === shareAlbumPath);
 
   // At an album root the photos come from the panel's tab (Edited/ or
@@ -76,7 +82,7 @@ export function GalleryPage() {
   const activeQuery = isTimeline ? timelineQuery : browseQuery;
   const { isLoading: baseLoading, isError, isFetching, refetch: baseRefetch } = activeQuery;
   const isLoading = baseLoading || (isAlbumRoot && panel.loading);
-  const refetch = () => { void baseRefetch(); if (isAlbumRoot) panel.refetch(); };
+  const refetch = () => { void baseRefetch(); if (isAlbumRoot) panel.refetch(); if (job) void jobQuery.refetch(); };
   const activeKey = isTimeline ? keys.timeline : isAlbumRoot ? panel.activeKey : keys.browse(path);
   const folders = !isTimeline && !isAlbumRoot ? browseQuery.data?.folders ?? [] : [];
   const allItems = isTimeline ? timelineQuery.data?.items ?? [] : isAlbumRoot ? panel.items : browseQuery.data?.items ?? [];
@@ -224,6 +230,17 @@ export function GalleryPage() {
         isFetching={isFetching}
         onRefresh={() => refetch()}
         menu={menu}
+        extra={isHomeDateFolder && hasShots && jobQuery.isSuccess && !job && (
+          <button
+            type="button"
+            onClick={() => startJobMut.mutate(path)}
+            disabled={startJobMut.isPending}
+            className="mr-1 flex items-center gap-1.5 rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-semibold text-on-accent transition hover:bg-primary-400 disabled:opacity-50"
+          >
+            {startJobMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+            <span className="sm:hidden">Start</span><span className="hidden sm:inline">Start workflow</span>
+          </button>
+        )}
       />
 
       {allItems.length > 0 && !selecting && !isEditedFolder && (
@@ -241,8 +258,9 @@ export function GalleryPage() {
         ) : hasContent ? (
           <div className="mx-auto max-w-screen-2xl p-3">
             {!isTimeline && path === '' && <HomeStrip folders={folders} onOpen={setPath} />}
+            {job && <JobPanel job={job} here={isAlbumRoot ? 'album' : 'folder'} />}
             {!isTimeline && isAlbumRoot && (
-              <AlbumPanel albumName={albumName} panel={panel} onCreateShare={() => open({ kind: 'shareCreate' })} />
+              <AlbumPanel albumName={albumName} panel={panel} onCreateShare={() => open({ kind: 'shareCreate' })} tabsOnly={!!job} />
             )}
             {!isTimeline && isEditedFolder && (
               <EditedFolderCard albumName={editedAlbumName} onRefetch={() => refetch()} onCreate={() => open({ kind: 'shareCreate' })} />

@@ -16,7 +16,7 @@ const PILL = 'h-8 rounded-full border border-border-strong px-3 text-xs font-med
 const BTN = 'flex items-center gap-1.5 rounded-lg border border-border-strong px-3 py-1.5 text-xs font-medium text-gray-200 transition hover:bg-surface disabled:opacity-50';
 
 /** Folder path on the editing machine for an album's Edited/ folder. */
-function editedPath(prefix: string, albumName: string): string {
+export function editedPath(prefix: string, albumName: string): string {
   const sep = prefix.includes('\\') ? '\\' : '/';
   return `${prefix.replace(/[\\/]+$/, '')}${sep}Albums${sep}${albumName}${sep}Edited`;
 }
@@ -81,11 +81,13 @@ export function useAlbumPanel(albumPath: string, shares: ShareSummary[]) {
 }
 
 export function AlbumPanel({
-  albumName, panel, onCreateShare,
+  albumName, panel, onCreateShare, tabsOnly = false,
 }: {
   albumName: string;
   panel: ReturnType<typeof useAlbumPanel>;
   onCreateShare: () => void;
+  /** The album belongs to a workflow job, whose card owns status and actions. */
+  tabsOnly?: boolean;
 }) {
   const { pathPrefix } = useAppConfig();
   const actions = useShareActions();
@@ -107,6 +109,17 @@ export function AlbumPanel({
       : share.phase === 'submitted' ? { label: 'Picks in', sub: `${share.finalCount} of ${share.cap} · ${fmtAgo(share.submittedAt ?? share.createdAt)}`, hot: true }
         : share.phase === 'delivery' ? { label: 'Delivered', sub: `${share.finalCount} photos`, hot: false }
           : { label: 'Awaiting picks', sub: share.selectedCount > 0 ? `${share.selectedCount} shortlisted so far` : 'no picks yet', hot: false };
+
+  const tabs = (
+    <div className="flex flex-wrap gap-2">
+      {proofing && <Pill on={tab === 'picks'} onClick={() => setTab('picks')}>Picks · {counts.picks}</Pill>}
+      {proofing && <Pill on={tab === 'shortlist'} onClick={() => setTab('shortlist')}>Shortlist · {counts.shortlist}</Pill>}
+      <Pill on={tab === 'edited'} onClick={() => setTab('edited')}>Edited · {counts.edited}</Pill>
+      {panel.hasSelected && <Pill on={tab === 'all'} onClick={() => setTab('all')}>All · {counts.all}</Pill>}
+    </div>
+  );
+
+  if (tabsOnly) return <div className="mb-4">{tabs}</div>;
 
   return (
     <div className="mb-4 space-y-3">
@@ -166,12 +179,7 @@ export function AlbumPanel({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        {proofing && <Pill on={tab === 'picks'} onClick={() => setTab('picks')}>Picks · {counts.picks}</Pill>}
-        {proofing && <Pill on={tab === 'shortlist'} onClick={() => setTab('shortlist')}>Shortlist · {counts.shortlist}</Pill>}
-        <Pill on={tab === 'edited'} onClick={() => setTab('edited')}>Edited · {counts.edited}</Pill>
-        {panel.hasSelected && <Pill on={tab === 'all'} onClick={() => setTab('all')}>All · {counts.all}</Pill>}
-      </div>
+      {tabs}
     </div>
   );
 }
