@@ -149,11 +149,13 @@ export function CullPage() {
   }, [step]);
   useEffect(() => () => { if (fxTimer.current !== null) window.clearTimeout(fxTimer.current); }, []);
 
-  /** Navigate; a stamp still showing finishes first so no rating is lost. */
+  /** Navigate between photos (arrows, nav buttons, sideways swipe); a stamp
+   *  still showing finishes first so no rating is lost. Stops at the last
+   *  photo: only rating it moves on to the end card. */
   const move = useCallback((d: number) => {
     if (fxTimer.current !== null) advance();
-    step(d);
-  }, [advance, step]);
+    setIdx((i) => (i === null ? i : Math.max(0, Math.min(total - 1, i + d))));
+  }, [advance, total]);
 
   const rate = useCallback((stars: number) => {
     if (idx === null) return;
@@ -444,7 +446,10 @@ export function CullPage() {
       {/* Stage */}
       <div
         ref={stageRef}
-        className={`relative flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden p-2 ${
+        // overflow: clip, not hidden: a zoomed photo overhangs the stage and a
+        // hidden-overflow box can still be scrolled (focus, scrollIntoView),
+        // which left later content (the end card) drawn off-centre.
+        className={`relative flex min-h-0 flex-1 touch-none select-none items-center justify-center p-2 [overflow:clip] ${
           zoomed ? (zoomLive ? 'cursor-grabbing' : 'cursor-grab') : ''
         }`}
         onTouchStart={onTouchStart}
