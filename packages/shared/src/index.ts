@@ -284,3 +284,52 @@ export interface SharePublicState {
   items: SharePublicItem[];
   downloadBytes?: number;   // delivery phase: total size of the downloadable originals
 }
+
+
+// ── Workflow jobs (Phase 9) ────────────────────────────────────────────────
+
+/**
+ * One shoot moving through the guided workflow. A job belongs to exactly one
+ * dated Home folder and, once culled, to the album made from it.
+ *   cull    – rate/reject, then create the album
+ *   edit    – edit in Lightroom into Edited/; owner marks it done
+ *   pick    – client picks from the edits, or the owner skips picking
+ *   deliver – release the finals
+ *   done    – delivered (terminal)
+ */
+export type JobStep = 'cull' | 'edit' | 'pick' | 'deliver' | 'done';
+
+/** How step ③ was resolved: the client picks, or everything is delivered. */
+export type PickMode = 'client' | 'all';
+
+export const JOB_STEPS: readonly JobStep[] = ['cull', 'edit', 'pick', 'deliver', 'done'];
+
+export interface Job {
+  id: string;
+  folderPath: string;        // dated Home folder, e.g. "2026-10-22"
+  albumPath: string | null;  // "Albums/<name>" once culling produced an album
+  step: JobStep;
+  pickMode: PickMode | null;
+  shareId: string | null;    // proofing share (client) or delivery share (all)
+  stepAt: Partial<Record<JobStep, number>>;  // epoch ms each step was last reached
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** A job joined with what the UI needs to render its current step. */
+export interface JobSummary extends Job {
+  albumName: string | null;
+  shots: number;             // album Selected/ count, or the folder's count before an album exists
+  unrated: number;           // folder shots still unrated (cull step only; else 0)
+  edited: number;            // album Edited/ count
+  share: ShareSummary | null;
+  waitingOnClient: boolean;  // step 'pick', mode 'client', share sent but not submitted
+}
+
+/** Body of PATCH /api/jobs/:id. Every field optional; validated server-side. */
+export interface JobPatch {
+  step?: JobStep;
+  albumPath?: string | null;
+  pickMode?: PickMode | null;
+  shareId?: string | null;
+}

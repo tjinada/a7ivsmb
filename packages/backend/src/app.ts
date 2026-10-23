@@ -13,6 +13,7 @@ import { logger } from './utils/logger.js';
 import { authRoutes } from './modules/auth/index.js';
 import { ftpRoutes, initFtp } from './modules/ftp/index.js';
 import { galleryRoutes } from './modules/gallery/index.js';
+import { jobsRoutes } from './modules/jobs/index.js';
 import { ownerShareRoutes, publicShareRoutes, renderSharePage, renderInactivePage, sharePageMeta, ogCardPng, initShares, isValidSlug, SHARE_ASSETS_DIR } from './modules/shares/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -101,6 +102,7 @@ app.use('/api/auth', ownerOnly, authRoutes);
 app.use('/api/ftp', ownerOnly, ftpRoutes);
 app.use('/api/gallery/shares', ownerOnly, ownerShareRoutes);
 app.use('/api/gallery', ownerOnly, galleryRoutes);
+app.use('/api/jobs', ownerOnly, jobsRoutes);
 
 // Serve the built frontend in production (single-container deploy). The owner
 // PWA (static assets + SPA shell) is never served on the share host.

@@ -393,6 +393,13 @@ export const sharesService = {
     return listShares().map(toSummary);
   },
 
+  /** One share's owner summary, or null if it doesn't exist (revoked). */
+  async get(id: string): Promise<ShareSummary | null> {
+    await loadShares();
+    const rec = getShareById(id);
+    return rec ? toSummary(rec) : null;
+  },
+
   /** Release full-res downloads. Only valid once the client has submitted. */
   async enableDelivery(id: string): Promise<ShareSummary> {
     await loadShares();
