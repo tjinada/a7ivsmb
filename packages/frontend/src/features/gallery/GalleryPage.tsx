@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Images, Play } from 'lucide-react';
@@ -31,19 +31,49 @@ import { shareItems, downloadZip } from './download';
 import { useJobFor, useStartJob } from '@/features/jobs/api';
 import { JobPanel } from '@/features/jobs/JobPanel';
 
+/** sessionStorage key for "where the grid was" when a tile opened cull, so
+ *  coming back lands on the same scroll position and filters. */
+const returnKey = (view: GalleryView, path: string) => `gallery-return:${view}:${path}`;
+interface ReturnSnap { scrollTop: number; ratingMin: number; typeFilter: TypeFilter }
+function readReturnSnap(key: string): ReturnSnap | null {
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as ReturnSnap) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Where a shoot photo is culled: its dated folder (one level up from a
+ *  JPG/RAW bucket). Album photos and loose files at the root aren't culled. */
+function cullFolderOf(item: GalleryItem): string | null {
+  if (item.path.startsWith('Albums/')) return null;
+  const parts = item.path.split('/');
+  parts.pop();
+  if (parts.length > 0 && /^(JPG|RAW)$/i.test(parts[parts.length - 1])) parts.pop();
+  return parts.length > 0 ? parts.join('/') : null;
+}
+
 export function GalleryPage() {
-  const [view, setView] = useState<GalleryView>('folders');
-  // Folder path lives in the URL (?path=...) so every drill-down is a real
-  // history entry: Android's back gesture walks up folders instead of
-  // closing the PWA, and reloads keep the user in the same folder.
+  // Folder path and view live in the URL (?path=…&view=timeline) so every
+  // drill-down is a real history entry: Android's back gesture walks up
+  // folders instead of closing the PWA, reloads keep the user in place, and
+  // coming back from cull restores the same grid.
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const path = searchParams.get('path') ?? '';
+  const view: GalleryView = searchParams.get('view') === 'timeline' ? 'timeline' : 'folders';
   const setPath = (p: string) => setSearchParams(p ? { path: p } : {});
+  const setView = (v: GalleryView) =>
+    setSearchParams({ ...(path ? { path } : {}), ...(v === 'timeline' ? { view: 'timeline' } : {}) });
+
+  // Returning from cull: the grid's scroll and filters as they were.
+  const [returnSnap] = useState(() => readReturnSnap(returnKey(view, path)));
 
   const [active, setActive] = useState<GalleryItem | null>(null);
-  const [ratingMin, setRatingMin] = useState(0);
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [ratingMin, setRatingMin] = useState(returnSnap?.ratingMin ?? 0);
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>(returnSnap?.typeFilter ?? 'all');
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<BulkBusy>(null);
@@ -93,8 +123,14 @@ export function GalleryPage() {
     qc.setQueryData(activeKey, (old: { items: GalleryItem[] } | undefined) => (old ? { ...old, items: fn(old.items) } : old));
   };
 
-  // Reset filters + selection when changing folders or views.
-  useEffect(() => { setRatingMin(0); setTypeFilter('all'); }, [path]);
+  // Reset filters + selection when changing folders or views (not on the
+  // first render, which may be restoring them after cull).
+  const firstPathRun = useRef(true);
+  useEffect(() => {
+    if (firstPathRun.current) { firstPathRun.current = false; return; }
+    setRatingMin(0);
+    setTypeFilter('all');
+  }, [path]);
   useEffect(() => { setSelecting(false); setSelected(new Set()); }, [path, view]);
 
   // ── Mutations ───────────────────────────────────────────────────────────
@@ -124,6 +160,16 @@ export function GalleryPage() {
   const hasContent = isTimeline
     ? allItems.length > 0
     : isAlbumRoot ? !!browseQuery.data : !!browseQuery.data && (folders.length > 0 || allItems.length > 0);
+  // Back from cull: put the grid where it was, once its photos are laid out
+  // (tiles are fixed squares, so the layout is final on the first render).
+  const restored = useRef(false);
+  useLayoutEffect(() => {
+    if (restored.current || !returnSnap || !hasContent || isLoading) return;
+    restored.current = true;
+    if (scrollRef.current) scrollRef.current.scrollTop = returnSnap.scrollTop;
+    try { sessionStorage.removeItem(returnKey(view, path)); } catch { /* ignore */ }
+  }, [returnSnap, hasContent, isLoading, view, path]);
+
   const groups = useMemo(() => {
     if (!isTimeline) return [];
     const out: { date: string; items: GalleryItem[] }[] = [];
@@ -195,7 +241,21 @@ export function GalleryPage() {
     if (opts.paths.length > 0) createAlbumMut.mutate(opts);
   };
 
-  const tileTap = (it: GalleryItem) => (selecting ? toggleSelect(it.path) : setActive(it));
+  // Shoot photos open in cull (the one place photos are reviewed and rated),
+  // starting at the tapped photo; album photos keep the plain viewer.
+  const openInCull = (it: GalleryItem, folder: string) => {
+    try {
+      const snap: ReturnSnap = { scrollTop: scrollRef.current?.scrollTop ?? 0, ratingMin, typeFilter };
+      sessionStorage.setItem(returnKey(view, path), JSON.stringify(snap));
+    } catch { /* storage unavailable: come back at the top */ }
+    navigate(`/cull?path=${encodeURIComponent(folder)}&photo=${encodeURIComponent(it.path)}`, { state: { fromGrid: true } });
+  };
+  const tileTap = (it: GalleryItem) => {
+    if (selecting) { toggleSelect(it.path); return; }
+    const folder = cullFolderOf(it);
+    if (folder) openInCull(it, folder);
+    else setActive(it);
+  };
 
   // ── Overflow menu ───────────────────────────────────────────────────────
   const menu: MenuAction[] = [];
@@ -247,7 +307,7 @@ export function GalleryPage() {
         <FilterBar ratingMin={ratingMin} onRatingMin={setRatingMin} typeFilter={typeFilter} onTypeFilter={setTypeFilter} />
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {isLoading ? (
           <div className="flex h-full items-center justify-center text-gray-500"><Loader2 className="h-6 w-6 animate-spin" /></div>
         ) : isError ? (

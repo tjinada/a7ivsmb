@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { X, Star, ChevronLeft, ChevronRight, Loader2, Trash2, ImageOff } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { X, Star, ChevronLeft, ChevronRight, Loader2, Trash2, ImageOff, Info, Share2 } from 'lucide-react';
 import type { ApiResponse, ExifInfo, GalleryItem } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { toast } from '@/components/Toast';
@@ -8,6 +8,8 @@ import { prettyDate } from '@/lib/dates';
 import { useBrowse, useRate, useDeleteItems, useInvalidateGallery } from '@/features/gallery/api';
 import { thumbUrl, previewUrl, originalUrl } from '@/features/gallery/mediaUrl';
 import { ConfirmDialog } from '@/features/gallery/ConfirmDialog';
+import { ExifPanel } from '@/features/gallery/Lightbox';
+import { saveImage } from '@/features/gallery/download';
 
 /** Reject is stored as 1 star, so the existing "delete below 2" cleanup and
  *  the rating filters keep working on culled folders. */
@@ -44,13 +46,23 @@ const clampNum = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo
  * Cull mode: one photo at a time, rate it, a stamp confirms the rating and it
  * advances. Keys 1–5 (1 = reject),
  * X = reject, ←/→ move, Esc exits. Touch: swipe up = ★5, down = reject,
- * sideways moves. Starts at the first unrated photo and preloads the next.
+ * sideways moves. Starts at `?photo=` when opened from a grid tile, else at
+ * the first unrated photo, and preloads the next. Also the shoot viewer:
+ * info panel, share/download, delete this photo.
  */
 export function CullPage() {
   const [params] = useSearchParams();
   const folder = params.get('path') ?? '';
+  const startPhoto = params.get('photo');
   const navigate = useNavigate();
-  const exit = useCallback(() => navigate(`/gallery?path=${encodeURIComponent(folder)}`, { replace: true }), [navigate, folder]);
+  const location = useLocation();
+  // Opened from a grid tile: going back returns to that exact grid (view,
+  // folder, scroll). Opened any other way: land on the shoot folder.
+  const cameFromGrid = (location.state as { fromGrid?: boolean } | null)?.fromGrid === true;
+  const exit = useCallback(
+    () => (cameFromGrid ? navigate(-1) : navigate(`/gallery?path=${encodeURIComponent(folder)}`, { replace: true })),
+    [navigate, folder, cameFromGrid],
+  );
 
   const browse = useBrowse(folder, folder !== '');
   // The FTP filer drops a day's shots into <date>/JPG and <date>/RAW, so a
@@ -78,12 +90,26 @@ export function CullPage() {
   const list = useMemo(() => items.filter((i) => !removed.has(i.path)), [items, removed]);
   const ratingOf = useCallback((it: GalleryItem) => ratings.get(it.path) ?? it.rating, [ratings]);
 
-  // Start at the first unrated photo once the folder has loaded.
+  // Once the folder has loaded: start at the tapped photo, else the first
+  // unrated one.
   useEffect(() => {
     if (idx !== null || list.length === 0) return;
+    // A tapped RAW opens on its JPG twin: same shot, matched by file stem.
+    const stem = (p: string) => (p.split('/').pop() ?? p).replace(/\.[^.]+$/, '').toLowerCase();
+    const tapped = startPhoto
+      ? (() => {
+          const exact = list.findIndex((i) => i.path === startPhoto);
+          return exact !== -1 ? exact : list.findIndex((i) => stem(i.path) === stem(startPhoto));
+        })()
+      : -1;
     const first = list.findIndex((i) => ratingOf(i) === 0);
-    setIdx(first === -1 ? 0 : first);
-  }, [list, idx, ratingOf]);
+    setIdx(tapped !== -1 ? tapped : first === -1 ? 0 : first);
+  }, [list, idx, ratingOf, startPhoto]);
+
+  // Viewer extras: info panel, share/download, delete this one photo.
+  const [showInfo, setShowInfo] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [confirmDeleteOne, setConfirmDeleteOne] = useState(false);
 
   const total = list.length;
   const current = idx !== null && idx < total ? list[idx] : null;
@@ -223,17 +249,23 @@ export function CullPage() {
   // Keyboard.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (confirmDelete) return;
+      if (confirmDelete || confirmDeleteOne) return;
       if (e.key >= '1' && e.key <= '5') rate(Number(e.key));
       else if (e.key === 'x' || e.key === 'X') rate(REJECT);
       else if (e.key === 'ArrowLeft') move(-1);
       else if (e.key === 'ArrowRight') move(1);
       else if (e.key === '0') setZoom(FIT);
-      else if (e.key === 'Escape') { if (zoomed) setZoom(FIT); else exit(); }
+      else if (e.key === 'i' || e.key === 'I') setShowInfo((v) => !v);
+      else if (e.key === 'Delete') { if (current) setConfirmDeleteOne(true); }
+      else if (e.key === 'Escape') {
+        if (showInfo) setShowInfo(false);
+        else if (zoomed) setZoom(FIT);
+        else exit();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [rate, move, exit, confirmDelete, zoomed]);
+  }, [rate, move, exit, confirmDelete, confirmDeleteOne, zoomed, showInfo, current]);
 
   // Preload the next preview so advancing is instant.
   useEffect(() => {
@@ -347,6 +379,30 @@ export function CullPage() {
     }
   };
 
+  /** Delete the photo on screen (its RAW/JPG twin goes with it, server-side);
+   *  the next one slides into its place. */
+  const deleteOne = async () => {
+    if (!current) return;
+    const p = current.path;
+    try {
+      await deleteMut.mutateAsync([p]);
+      setRemoved((r) => new Set([...r, p]));
+      setConfirmDeleteOne(false);
+      void invalidate();
+      toast.success('Photo deleted');
+    } catch {
+      toast.error('Delete failed');
+    }
+  };
+
+  const share = async () => {
+    if (!current) return;
+    setSaving(true);
+    try { await saveImage(current); }
+    catch { toast.error('Download failed'); }
+    finally { setSaving(false); }
+  };
+
   const title = folder.split('/').pop() ?? folder;
 
   return (
@@ -360,13 +416,25 @@ export function CullPage() {
           <p className="truncate text-[13px] font-semibold">Culling {prettyDate(title, false)}</p>
           <p className="truncate text-xs text-gray-400">
             {total === 0 ? 'Nothing to cull' : `${Math.min((idx ?? 0) + 1, total)} / ${total} · ${tallies.unrated} to go`}
+            {total > 0 && (
+              <span className="sm:hidden"> · <span className="text-primary-500">★5</span> {tallies.five} · <span className="text-red-400">✕</span> {tallies.rejected}</span>
+            )}
           </p>
         </div>
-        <div className="flex flex-none gap-2.5 text-xs text-gray-400">
+        <div className="hidden flex-none gap-2.5 text-xs text-gray-400 sm:flex">
           <span><span className="font-semibold text-primary-500">★5</span> {tallies.five}</span>
           <span><span className="font-semibold text-gray-100">★4</span> {tallies.four}</span>
           <span><span className="font-semibold text-red-400">✕</span> {tallies.rejected}</span>
         </div>
+        {current && (
+          <div className="flex flex-none gap-1.5">
+            <HeadBtn label="Info (I)" on={showInfo} onClick={() => setShowInfo((v) => !v)}><Info className="h-[18px] w-[18px]" /></HeadBtn>
+            <HeadBtn label="Share or download" onClick={share} disabled={saving}>
+              {saving ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Share2 className="h-[18px] w-[18px]" />}
+            </HeadBtn>
+            <HeadBtn label="Delete this photo" danger onClick={() => setConfirmDeleteOne(true)}><Trash2 className="h-[18px] w-[18px]" /></HeadBtn>
+          </div>
+        )}
       </div>
       <div className="mx-3 h-[3px] overflow-hidden rounded-full bg-border">
         <div className="h-full bg-primary-500 transition-[width] duration-300" style={{ width: total ? `${Math.round((tallies.rated / total) * 100)}%` : '0%' }} />
@@ -406,6 +474,7 @@ export function CullPage() {
             }}
             zoom={zoom}
             zoomLive={zoomLive}
+            showInfo={showInfo}
           />
         ) : null}
 
@@ -467,6 +536,16 @@ export function CullPage() {
         </div>
       )}
 
+      {confirmDeleteOne && current && (
+        <ConfirmDialog
+          title="Delete this photo?"
+          message={`This permanently removes ${current.name}${current.twin ? ' and its RAW/JPG twin' : ''} from the share. This can't be undone.`}
+          confirmLabel="Delete"
+          busy={deleteMut.isPending}
+          onConfirm={deleteOne}
+          onCancel={() => setConfirmDeleteOne(false)}
+        />
+      )}
       {confirmDelete && (
         <ConfirmDialog
           title={`Delete ${rejectedItems.length} rejected photo${rejectedItems.length === 1 ? '' : 's'}?`}
@@ -506,12 +585,13 @@ function stageStyle({ drag, dragging, exit }: StageMotion): React.CSSProperties 
 
 /** The photo itself with the filename / exposure chips. Keyed by path so load
  *  state resets per photo. */
-function Stage({ item, rating, motion, zoom, zoomLive }: {
+function Stage({ item, rating, motion, zoom, zoomLive, showInfo }: {
   item: GalleryItem;
   rating: number;
   motion: StageMotion;
   zoom: Zoom;
   zoomLive: boolean;
+  showInfo: boolean;
 }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -588,7 +668,45 @@ function Stage({ item, rating, motion, zoom, zoomLive }: {
       {chips && (
         <span className="pointer-events-none absolute right-4 top-3 rounded-md bg-base/75 px-2 py-1 text-[11px] text-gray-400 backdrop-blur-sm">{chips}</span>
       )}
+      {showInfo && (
+        <div
+          className="absolute inset-x-2 bottom-2 z-30 max-h-[60%] touch-pan-y select-text overflow-y-auto rounded-xl border border-white/10 bg-black/85 px-4 py-3 backdrop-blur"
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          <ExifPanel exif={exif} loading={exif === null} />
+        </div>
+      )}
     </>
+  );
+}
+
+function HeadBtn({ label, on, danger, disabled, onClick, children }: {
+  label: string;
+  on?: boolean;
+  danger?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      aria-pressed={on}
+      className={`flex h-9 w-9 items-center justify-center rounded-full transition disabled:opacity-50 ${
+        on ? 'bg-primary-500 text-on-accent'
+          : danger ? 'bg-white/[0.08] text-red-400 hover:bg-red-500/20'
+            : 'bg-white/[0.08] text-gray-200 hover:bg-white/15'
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -279,7 +279,8 @@ function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-function ExifPanel({ exif, loading }: { exif: ExifInfo | null; loading: boolean }) {
+/** Camera settings, lens, date and map link. Shared with the cull screen. */
+export function ExifPanel({ exif, loading }: { exif: ExifInfo | null; loading: boolean }) {
   if (loading || !exif) {
     return (
       <div className="flex items-center justify-center gap-2 py-3 text-sm text-white/60">
