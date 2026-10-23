@@ -1,17 +1,11 @@
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { Share2, Library, ChevronRight } from 'lucide-react';
-import type { ApiResponse, FtpStatus, FolderEntry } from '@sonycam/shared';
-import { api } from '@/api/client';
+import type { FolderEntry } from '@sonycam/shared';
+import { useFtpStatus } from '@/features/transfers/useFtpStatus';
 import { AuthImage } from './AuthImage';
 import { thumbUrl } from './mediaUrl';
 import { useAlbums, useShares } from './api';
 import { fmtAgo, isDateSegment, prettyDate } from '@/lib/dates';
-
-async function fetchStatus(): Promise<FtpStatus | null> {
-  const res = await api.get<ApiResponse<FtpStatus>>('/ftp/status');
-  return res.data.data ?? null;
-}
 
 const CARD = 'flex items-center gap-3 rounded-2xl border bg-surface p-3 text-left transition hover:border-border-strong active:scale-[0.99]';
 
@@ -23,7 +17,7 @@ const CARD = 'flex items-center gap-3 rounded-2xl border bg-surface p-3 text-lef
 export function HomeStrip({ folders, onOpen }: { folders: FolderEntry[]; onOpen: (path: string) => void }) {
   const dated = folders.filter((f) => isDateSegment(f.name)).sort((a, b) => b.name.localeCompare(a.name));
   const latest = dated[0];
-  const status = useQuery({ queryKey: ['ftp', 'status'], queryFn: fetchStatus, refetchInterval: 15_000 }).data;
+  const status = useFtpStatus().data;
   const shares = useShares().data ?? [];
   const needsYou = shares.filter((s) => s.phase === 'submitted');
   const albums = useAlbums().data ?? [];

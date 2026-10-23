@@ -1,27 +1,16 @@
 import { NavLink } from 'react-router-dom';
-import { Images, Share2, Download, Settings, type LucideIcon } from 'lucide-react';
-import { useShares } from '@/features/gallery/api';
-import { useAuthStore } from '@/stores/authStore';
+import { NAV, useNeedsYouCount } from './nav';
 
-const tabs: { to: string; label: string; Icon: LucideIcon }[] = [
-  { to: '/gallery', label: 'Gallery', Icon: Images },
-  { to: '/shares', label: 'Shares', Icon: Share2 },
-  { to: '/transfers', label: 'Transfers', Icon: Download },
-  { to: '/settings', label: 'Settings', Icon: Settings },
-];
-
+/** Phone navigation: the bottom tab bar. Hidden at md+ where SideNav takes over. */
 export function TabBar() {
-  const token = useAuthStore((s) => s.token);
-  // Submitted shares are the ones waiting on you: badge the tab.
-  const shares = useShares(!!token).data ?? [];
-  const needsYou = shares.filter((s) => s.phase === 'submitted').length;
+  const needsYou = useNeedsYouCount();
 
   return (
     <nav
-      className="flex flex-shrink-0 border-t border-border bg-base"
+      className="flex flex-shrink-0 border-t border-border bg-base md:hidden"
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom) - 0.5rem, 0.25rem)' }}
     >
-      {tabs.map(({ to, label, Icon }) => (
+      {NAV.map(({ to, label, Icon }) => (
         <NavLink
           key={to}
           to={to}
