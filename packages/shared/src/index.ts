@@ -120,6 +120,7 @@ export interface FolderEntry {
   modified: number;   // epoch milliseconds
   count?: number;     // photos inside (peeks one level into JPG/RAW)
   cover?: string;     // share-relative path of a cover image, if any
+  unrated?: number;   // dated folders only: shots with no star rating yet
 }
 
 /** 'image' = browser-renderable (thumbnailable); 'raw' = download-only. */
@@ -164,6 +165,8 @@ export type AlbumFormats = 'both' | 'jpg' | 'raw';
 export interface AlbumInfo {
   name: string;
   path: string;             // share-relative POSIX path, e.g. "Albums/June Wedding"
+  shots: number;            // distinct shots in Selected/ (JPG bucket, else RAW)
+  edited: number;           // JPGs in Edited/
 }
 
 /** Result of POST /api/gallery/albums (create or add-to). */

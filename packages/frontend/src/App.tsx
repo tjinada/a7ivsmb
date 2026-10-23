@@ -4,6 +4,8 @@ import { LoginPage } from '@/features/auth/LoginPage';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { GalleryPage } from '@/features/gallery/GalleryPage';
 import { TransfersPage } from '@/features/transfers/TransfersPage';
+import { SharesPage } from '@/features/shares/SharesPage';
+import { CullPage } from '@/features/cull/CullPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { PWAUpdatePrompt, InstallPrompt, OfflineIndicator } from '@/components/pwa';
 import { Toaster } from '@/components/Toast';
@@ -21,15 +23,25 @@ export default function App() {
       <InstallPrompt />
       {token ? (
         <BrowserRouter>
-          <AppLayout>
-            <Routes>
-              <Route path="/" element={<Navigate to="/gallery" replace />} />
-              <Route path="/gallery" element={<GalleryPage />} />
-              <Route path="/transfers" element={<TransfersPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="*" element={<Navigate to="/gallery" replace />} />
-            </Routes>
-          </AppLayout>
+          <Routes>
+            {/* Cull mode is full-screen: no header or tab bar. */}
+            <Route path="/cull" element={<CullPage />} />
+            <Route
+              path="*"
+              element={
+                <AppLayout>
+                  <Routes>
+                    <Route path="/" element={<Navigate to="/gallery" replace />} />
+                    <Route path="/gallery" element={<GalleryPage />} />
+                    <Route path="/shares" element={<SharesPage />} />
+                    <Route path="/transfers" element={<TransfersPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="*" element={<Navigate to="/gallery" replace />} />
+                  </Routes>
+                </AppLayout>
+              }
+            />
+          </Routes>
         </BrowserRouter>
       ) : (
         <LoginPage />

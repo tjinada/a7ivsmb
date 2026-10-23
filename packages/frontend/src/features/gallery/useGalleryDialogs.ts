@@ -8,7 +8,6 @@ export type GalleryDialog =
   | { kind: 'cleanup' }
   | { kind: 'album'; source: 'selection' | 'starred' }
   | { kind: 'shareCreate' }
-  | { kind: 'shareManager' }
   | { kind: 'rename' }
   | { kind: 'deleteAlbum' }
   | { kind: 'backfill' }

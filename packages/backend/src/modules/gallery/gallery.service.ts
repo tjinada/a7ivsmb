@@ -53,6 +53,9 @@ const MIME: Record<string, string> = {
 
 const toPosix = (p: string) => p.split(path.sep).join('/');
 
+/** A dated-folder segment, e.g. "2026-07-02". */
+const DATE_SEG_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Classify a filename into a gallery kind, or null if it's not a photo. */
 function kindOf(name: string): GalleryItemKind | null {
   const ext = path.extname(name).toLowerCase();
@@ -369,8 +372,10 @@ async function albumSummary(albumAbs: string, root: string): Promise<{ count: nu
   return { count, cover: coverAbs ? toPosix(path.relative(root, coverAbs)) : undefined };
 }
 
-/** Photo count + a cover image for a folder card (peeks one level into JPG/RAW). */
-async function folderSummary(absDir: string, root: string): Promise<{ count: number; cover?: string }> {
+/** Photo count + a cover image for a folder card (peeks one level into JPG/RAW).
+ *  Dated shoot folders also report how many shots are still unrated, which is
+ *  what the home strip's "Cull" card is about. */
+async function folderSummary(absDir: string, root: string): Promise<{ count: number; cover?: string; unrated?: number }> {
   // Albums nest photos two levels deep, so summarize them explicitly.
   const relParts = toPosix(path.relative(root, absDir)).split('/');
   if (relParts.length === 2 && relParts[0] === ALBUMS_ROOT) {
@@ -383,13 +388,17 @@ async function folderSummary(absDir: string, root: string): Promise<{ count: num
     return { count: 0 };
   }
 
+  const dated = DATE_SEG_RE.test(path.basename(absDir));
   let count = 0;
+  let unrated = 0;
   let cover: string | undefined;
   let coverIsRaw = true;
   const consider = (absFile: string, kind: GalleryItemKind) => {
     count += 1;
+    const rel = toPosix(path.relative(root, absFile));
+    if (dated && getRating(rel) === 0) unrated += 1;
     if (!cover || (coverIsRaw && kind === 'image')) {
-      cover = toPosix(path.relative(root, absFile));
+      cover = rel;
       coverIsRaw = kind === 'raw';
     }
   };
@@ -432,11 +441,8 @@ async function folderSummary(absDir: string, root: string): Promise<{ count: num
     }
   }
 
-  return { count, cover };
+  return dated ? { count, cover, unrated } : { count, cover };
 }
-
-/** A dated-folder segment, e.g. "2026-07-02". */
-const DATE_SEG_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** RAW/JPG bucket for a filename (mirrors the FTP filer's split). */
 function backfillBucket(name: string): 'RAW' | 'JPG' {
@@ -674,6 +680,7 @@ export const galleryService = {
         const summary = await folderSummary(safeResolve(f.path), root);
         f.count = summary.count;
         f.cover = summary.cover;
+        if (summary.unrated !== undefined) f.unrated = summary.unrated;
       }),
     );
 
@@ -806,7 +813,7 @@ export const galleryService = {
    * Rename an album folder and remap the ratings keyed under it. Blocked while
    * a client share references it, and when the target name already exists.
    */
-  async renameAlbum(name: string, newNameRaw: string): Promise<AlbumInfo> {
+  async renameAlbum(name: string, newNameRaw: string): Promise<Pick<AlbumInfo, 'name' | 'path'>> {
     await loadRatings();
     await loadShares();
     const albumName = sanitizeAlbumName(name);
@@ -918,10 +925,21 @@ export const galleryService = {
     } catch {
       return [];
     }
-    return dirents
+    const names = dirents
       .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
-      .map((d) => ({ name: d.name, path: `${ALBUMS_ROOT}/${d.name}` }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .map((d) => d.name)
+      .sort((a, b) => a.localeCompare(b));
+    return Promise.all(
+      names.map(async (name) => {
+        const abs = path.join(albumsDir, name);
+        const [jpg, raw, edited] = await Promise.all([
+          imageNamesIn(path.join(abs, 'Selected', 'JPG')),
+          imageNamesIn(path.join(abs, 'Selected', 'RAW')),
+          imageNamesIn(path.join(abs, 'Edited')),
+        ]);
+        return { name, path: `${ALBUMS_ROOT}/${name}`, shots: jpg.length || raw.length, edited: edited.length };
+      }),
+    );
   },
 
   /**

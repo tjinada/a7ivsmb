@@ -12,14 +12,14 @@ export function SectionLabel({ children }: { children: ReactNode }) {
 }
 
 /** The pinned Albums card plus the folder cards for one directory listing. */
-export function FolderGrid({ folders, onOpen }: { folders: FolderEntry[]; onOpen: (path: string) => void }) {
+export function FolderGrid({ folders, onOpen, pinAlbums = true }: { folders: FolderEntry[]; onOpen: (path: string) => void; pinAlbums?: boolean }) {
   const albumsFolder = folders.find((f) => f.path === 'Albums');
   const others = albumsFolder ? folders.filter((f) => f.path !== 'Albums') : folders;
   if (folders.length === 0) return null;
 
   return (
     <section className="mb-5">
-      {albumsFolder && (
+      {albumsFolder && pinAlbums && (
         <button
           type="button"
           onClick={() => onOpen(albumsFolder.path)}

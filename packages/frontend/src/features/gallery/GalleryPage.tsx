@@ -15,13 +15,14 @@ import { FilterBar, type TypeFilter } from './FilterBar';
 import { FolderGrid, SectionLabel } from './FolderGrid';
 import { PhotoGrid, TimelineGrid } from './PhotoGrid';
 import { BulkActionBar, type BulkBusy } from './BulkActionBar';
-import { AlbumShareCard, EditedFolderCard } from './AlbumShareCard';
+import { EditedFolderCard } from './AlbumShareCard';
+import { HomeStrip } from './HomeStrip';
+import { AlbumPanel, useAlbumPanel } from './AlbumPanel';
 import { Lightbox } from './Lightbox';
 import { ConfirmDialog } from './ConfirmDialog';
 import { CleanupDialog } from './CleanupDialog';
 import { AlbumDialog } from './AlbumDialog';
 import { ShareDialog } from './ShareDialog';
-import { ShareManager } from './ShareManager';
 import { RenameAlbumDialog } from './RenameAlbumDialog';
 import { BackfillDialog } from './BackfillDialog';
 import { DeleteFolderDialog } from './DeleteFolderDialog';
@@ -67,13 +68,17 @@ export function GalleryPage() {
   const albumsQuery = useAlbums(dialog.kind === 'album');
   const sharesQuery = useShares(!isTimeline && path.startsWith('Albums'));
   const albumShares = (sharesQuery.data ?? []).filter((s) => s.albumPath === shareAlbumPath);
-  const anySubmitted = (sharesQuery.data ?? []).some((s) => s.phase === 'submitted');
 
+  // At an album root the photos come from the panel's tab (Edited/ or
+  // Selected/JPG), not from the album folder itself, which holds no files.
+  const panel = useAlbumPanel(isAlbumRoot ? path : '', albumShares);
   const activeQuery = isTimeline ? timelineQuery : browseQuery;
-  const { isLoading, isError, isFetching, refetch } = activeQuery;
-  const activeKey = isTimeline ? keys.timeline : keys.browse(path);
-  const folders = !isTimeline ? browseQuery.data?.folders ?? [] : [];
-  const allItems = isTimeline ? timelineQuery.data?.items ?? [] : browseQuery.data?.items ?? [];
+  const { isLoading: baseLoading, isError, isFetching, refetch: baseRefetch } = activeQuery;
+  const isLoading = baseLoading || (isAlbumRoot && panel.loading);
+  const refetch = () => { void baseRefetch(); if (isAlbumRoot) panel.refetch(); };
+  const activeKey = isTimeline ? keys.timeline : isAlbumRoot ? panel.activeKey : keys.browse(path);
+  const folders = !isTimeline && !isAlbumRoot ? browseQuery.data?.folders ?? [] : [];
+  const allItems = isTimeline ? timelineQuery.data?.items ?? [] : isAlbumRoot ? panel.items : browseQuery.data?.items ?? [];
   const truncated = isTimeline ? timelineQuery.data?.truncated ?? false : false;
 
   /** Patch the items array of whichever query is currently showing. */
@@ -109,7 +114,9 @@ export function GalleryPage() {
   const selectedItems = allItems.filter((i) => selected.has(i.path));
   const activeIndex = active ? shownItems.findIndex((i) => i.path === active.path) : -1;
   const allShownSelected = shownItems.length > 0 && shownItems.every((i) => selected.has(i.path));
-  const hasContent = isTimeline ? allItems.length > 0 : !!browseQuery.data && (folders.length > 0 || allItems.length > 0);
+  const hasContent = isTimeline
+    ? allItems.length > 0
+    : isAlbumRoot ? !!browseQuery.data : !!browseQuery.data && (folders.length > 0 || allItems.length > 0);
   const groups = useMemo(() => {
     if (!isTimeline) return [];
     const out: { date: string; items: GalleryItem[] }[] = [];
@@ -226,28 +233,26 @@ export function GalleryPage() {
           </div>
         ) : hasContent ? (
           <div className="mx-auto max-w-screen-2xl p-3">
+            {!isTimeline && path === '' && <HomeStrip folders={folders} onOpen={setPath} />}
             {!isTimeline && isAlbumRoot && (
-              <AlbumShareCard
-                albumName={albumName}
-                shares={albumShares}
-                anySubmitted={anySubmitted}
-                onRefetch={() => refetch()}
-                onManage={() => open({ kind: 'shareManager' })}
-                onCreate={() => open({ kind: 'shareCreate' })}
-              />
+              <AlbumPanel albumName={albumName} panel={panel} onCreateShare={() => open({ kind: 'shareCreate' })} />
             )}
             {!isTimeline && isEditedFolder && (
               <EditedFolderCard albumName={editedAlbumName} onRefetch={() => refetch()} onCreate={() => open({ kind: 'shareCreate' })} />
             )}
-            {!isTimeline && <FolderGrid folders={folders} onOpen={setPath} />}
+            {!isTimeline && <FolderGrid folders={folders} onOpen={setPath} pinAlbums={path !== ''} />}
 
             {isTimeline ? (
               <TimelineGrid groups={groups} truncated={truncated} total={allItems.length} selecting={selecting} selected={selected} onTap={tileTap} />
-            ) : allItems.length > 0 && (
+            ) : allItems.length > 0 ? (
               <section>
                 {folders.length > 0 && <SectionLabel>Photos</SectionLabel>}
                 <PhotoGrid items={shownItems} selecting={selecting} selected={selected} onTap={tileTap} />
               </section>
+            ) : isAlbumRoot && (
+              <p className="py-10 text-center text-sm text-gray-500">
+                {panel.tab === 'all' ? 'No photos in this album yet.' : panel.tab === 'edited' ? 'No edited JPGs yet — upload them above.' : 'Nothing here yet.'}
+              </p>
             )}
           </div>
         ) : (
@@ -321,7 +326,6 @@ export function GalleryPage() {
       {dialog.kind === 'shareCreate' && shareAlbumName && (
         <ShareDialog albumPath={shareAlbumPath} albumName={shareAlbumName} onClose={close} />
       )}
-      {dialog.kind === 'shareManager' && <ShareManager onClose={close} />}
       {dialog.kind === 'rename' && isAlbumRoot && (
         <RenameAlbumDialog currentName={albumName} busy={renameAlbumMut.isPending} onConfirm={(newName) => renameAlbumMut.mutate({ name: albumName, newName })} onCancel={close} />
       )}
