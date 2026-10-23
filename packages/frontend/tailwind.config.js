@@ -19,6 +19,8 @@ export default {
           600: '#2563eb',
           700: '#1d4ed8',
         },
+        // Text/icon colour on top of a primary-filled control.
+        'on-accent': '#ffffff',
       },
     },
   },
