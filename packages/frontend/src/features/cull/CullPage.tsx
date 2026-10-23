@@ -27,8 +27,9 @@ function stampTone(stars: number): { badge: string; ring: string; label: string 
 
 /** Which items a folder is culled over: the JPGs (RAW twins are rated with
  *  them server-side), or the RAWs when a folder has only RAW. In shooting
- *  order, oldest first (the folder lists newest first): arrival time, then
- *  the camera's file number. */
+ *  order, oldest first: arrival time, then the camera's file number (the
+ *  folder listing uses the same order; sorting here keeps cull independent
+ *  of it). */
 function cullable(items: GalleryItem[]): GalleryItem[] {
   const jpgs = items.filter((i) => i.kind === 'image');
   const pick = jpgs.length > 0 ? jpgs : items.filter((i) => i.kind === 'raw');

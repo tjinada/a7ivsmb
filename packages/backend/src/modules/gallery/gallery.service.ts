@@ -687,14 +687,15 @@ export const galleryService = {
       items.push({ path: relPath, name: e.name, size: s.size, modified: s.mtimeMs, kind, rating: getRating(relPath) });
     }
 
-    // Newest activity first for folders. Photos inside curated albums read in
-    // natural filename order (the order they were named/exported); everything
-    // else (dated shoot folders) stays newest-first.
+    // Newest activity first for folders. Photos read in shooting order:
+    // inside curated albums by natural filename (the order they were
+    // named/exported); in dated shoot folders oldest first by arrival time,
+    // ties broken by the camera's file number.
     const relNorm = toPosix(path.relative(root, dir));
     const inAlbums = relNorm === ALBUMS_ROOT || relNorm.startsWith(`${ALBUMS_ROOT}/`);
     folders.sort((a, b) => b.modified - a.modified);
     if (inAlbums) items.sort((a, b) => compareNames(a.name, b.name));
-    else items.sort((a, b) => b.modified - a.modified);
+    else items.sort((a, b) => a.modified - b.modified || compareNames(a.name, b.name));
 
     // Pair each photo with its JPG/RAW twin (this folder + sibling bucket).
     const entries = items.map((it) => ({ relPath: it.path, kind: it.kind }));
