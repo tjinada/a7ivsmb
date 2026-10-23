@@ -1,17 +1,20 @@
 import { Link } from 'react-router-dom';
-import { Share2, Library, ChevronRight } from 'lucide-react';
-import type { FolderEntry } from '@sonycam/shared';
+import { Share2, Library, ChevronRight, ListChecks } from 'lucide-react';
+import type { FolderEntry, JobStep } from '@sonycam/shared';
+import { useJobs, needsOwner } from '@/features/jobs/api';
 import { useFtpStatus } from '@/features/transfers/useFtpStatus';
 import { AuthImage } from './AuthImage';
 import { thumbUrl } from './mediaUrl';
 import { useAlbums, useShares } from './api';
 import { fmtAgo, isDateSegment, prettyDate } from '@/lib/dates';
 
+const STEP_WORD: Record<JobStep, string> = { cull: 'cull', edit: 'edit', pick: 'picks', deliver: 'send', done: 'done' };
+
 const CARD = 'flex items-center gap-3 rounded-2xl border bg-surface p-3 text-left transition hover:border-border-strong active:scale-[0.99]';
 
 /**
- * The three things worth opening right after a shoot: the latest dated
- * folder (with Cull), shares that need you, and the albums. Shown at the
+ * The things worth opening right after a shoot: the latest dated folder
+ * (with Cull), jobs and shares that need you, and the albums. Shown at the
  * gallery root in folders view.
  */
 export function HomeStrip({ folders, onOpen }: { folders: FolderEntry[]; onOpen: (path: string) => void }) {
@@ -23,11 +26,13 @@ export function HomeStrip({ folders, onOpen }: { folders: FolderEntry[]; onOpen:
   const albums = useAlbums().data ?? [];
   const liveAlbums = new Set(shares.map((s) => s.albumPath));
   const ready = albums.filter((a) => a.edited > 0 && !liveAlbums.has(a.path)).length;
+  const jobs = useJobs().data ?? [];
+  const jobsForYou = jobs.filter(needsOwner);
 
-  if (!latest && shares.length === 0 && albums.length === 0) return null;
+  if (!latest && shares.length === 0 && albums.length === 0 && jobs.length === 0) return null;
 
   return (
-    <section className="mb-5 grid gap-2.5 md:grid-cols-3">
+    <section className={`mb-5 grid gap-2.5 md:grid-cols-2 ${jobs.length > 0 ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
       {latest && (
         <button type="button" onClick={() => onOpen(latest.path)} className={`${CARD} border-border`}>
           <div className="h-11 w-11 flex-none overflow-hidden rounded-lg bg-base">
@@ -52,6 +57,25 @@ export function HomeStrip({ folders, onOpen }: { folders: FolderEntry[]; onOpen:
             </Link>
           )}
         </button>
+      )}
+
+      {jobs.length > 0 && (
+        <Link to="/jobs" className={`${CARD} ${jobsForYou.length > 0 ? 'border-primary-500' : 'border-border'}`}>
+          <span className={`flex h-11 w-11 flex-none items-center justify-center rounded-lg ${jobsForYou.length > 0 ? 'bg-primary-500/15 text-primary-400' : 'bg-white/[0.06] text-gray-200'}`}>
+            <ListChecks className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-gray-100">
+              {jobsForYou.length > 0 ? `${jobsForYou.length} job${jobsForYou.length === 1 ? '' : 's'} need${jobsForYou.length === 1 ? 's' : ''} you` : 'Jobs'}
+            </span>
+            <span className="block truncate text-xs text-gray-400">
+              {jobsForYou.length > 0
+                ? jobsForYou.map((j) => `${j.albumName ?? prettyDate(j.folderPath.split('/').pop() ?? '', false)} · ${STEP_WORD[j.step]}`).join(' · ')
+                : `${jobs.filter((j) => j.step !== 'done').length} active · nothing waiting on you`}
+            </span>
+          </span>
+          {jobsForYou.length > 0 ? <span className="h-2.5 w-2.5 flex-none rounded-full bg-primary-500" /> : <ChevronRight className="h-4 w-4 flex-none text-gray-600" />}
+        </Link>
       )}
 
       <Link to="/shares" className={`${CARD} ${needsYou.length > 0 ? 'border-primary-500' : 'border-border'}`}>

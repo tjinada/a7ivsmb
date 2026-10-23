@@ -1,9 +1,9 @@
 import { NavLink } from 'react-router-dom';
-import { NAV, useNeedsYouCount } from './nav';
+import { NAV, useNavBadges } from './nav';
 
 /** Phone navigation: the bottom tab bar. Hidden at md+ where SideNav takes over. */
 export function TabBar() {
-  const needsYou = useNeedsYouCount();
+  const badges = useNavBadges();
 
   return (
     <nav
@@ -22,9 +22,9 @@ export function TabBar() {
         >
           <Icon className="h-5 w-5" />
           {label}
-          {to === '/shares' && needsYou > 0 && (
+          {(badges[to] ?? 0) > 0 && (
             <span className="absolute left-[calc(50%+6px)] top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary-500 px-1.5 text-[11px] font-bold text-on-accent">
-              {needsYou}
+              {badges[to]}
             </span>
           )}
         </NavLink>

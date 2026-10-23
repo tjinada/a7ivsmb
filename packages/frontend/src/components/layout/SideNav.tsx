@@ -2,16 +2,16 @@ import { NavLink } from 'react-router-dom';
 import { useAppConfig } from '@/lib/useAppConfig';
 import { useFtpStatus } from '@/features/transfers/useFtpStatus';
 import { BrandMark } from './BrandMark';
-import { NAV, useNeedsYouCount } from './nav';
+import { NAV, useNavBadges } from './nav';
 
 /**
  * Desktop navigation: a fixed-width sidebar with the brand, the sections, the
- * Shares badge, and the FTP receiver's state at the foot. Rendered at md+ only;
+ * Jobs/Shares badges, and the FTP receiver's state at the foot. Rendered at md+ only;
  * phones get the TabBar.
  */
 export function SideNav() {
   const { brandName } = useAppConfig();
-  const needsYou = useNeedsYouCount();
+  const badges = useNavBadges();
   const status = useFtpStatus().data;
   const ftp = !status
     ? { dot: 'bg-gray-600', text: 'FTP status unknown' }
@@ -39,9 +39,9 @@ export function SideNav() {
           >
             <Icon className="h-[18px] w-[18px]" />
             {label}
-            {to === '/shares' && needsYou > 0 && (
+            {(badges[to] ?? 0) > 0 && (
               <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary-500 px-1.5 text-[11px] font-bold text-on-accent">
-                {needsYou}
+                {badges[to]}
               </span>
             )}
             {to === '/transfers' && status?.activeConnections ? (
