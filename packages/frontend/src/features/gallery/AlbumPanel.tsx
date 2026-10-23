@@ -31,18 +31,25 @@ export function useAlbumPanel(albumPath: string, shares: ShareSummary[]) {
   const enabled = albumPath !== '';
   const editedKey = `${albumPath}/Edited`;
   // Albums copy into Selected/JPG and/or Selected/RAW depending on the formats
-  // chosen at creation. Read JPG; if that bucket doesn't exist, read RAW.
+  // chosen at creation; albums from before that split hold their copies in
+  // Selected/ itself. Try the buckets first, then the bare folder.
   const jpgKey = `${albumPath}/Selected/JPG`;
   const rawKey = `${albumPath}/Selected/RAW`;
+  const bareKey = `${albumPath}/Selected`;
   const edited = useBrowse(editedKey, enabled, { retry: false });
   const selectedJpg = useBrowse(jpgKey, enabled, { retry: false });
-  const useRaw = enabled && selectedJpg.isError;
-  const selectedRaw = useBrowse(rawKey, useRaw, { retry: false });
-  const selected = useRaw ? selectedRaw : selectedJpg;
-  const selectedKey = useRaw ? rawKey : jpgKey;
+  // A bucket that is missing *or empty* is not the one holding the copies.
+  const empty = (q: { isError: boolean; isSuccess: boolean; data?: { items: unknown[] } }) =>
+    q.isError || (q.isSuccess && (q.data?.items.length ?? 0) === 0);
+  const tryRaw = enabled && empty(selectedJpg);
+  const selectedRaw = useBrowse(rawKey, tryRaw, { retry: false });
+  const tryBare = tryRaw && empty(selectedRaw);
+  const selectedBare = useBrowse(bareKey, tryBare, { retry: false });
+  const selected = tryBare ? selectedBare : tryRaw ? selectedRaw : selectedJpg;
+  const selectedKey = tryBare ? bareKey : tryRaw ? rawKey : jpgKey;
   // An album filled straight from Lightroom has no Selected/ at all: it has
   // edits, not copied originals, so "shots" is meaningless there.
-  const hasSelected = enabled && !!selected.data;
+  const hasSelected = enabled && !!selected.data && selected.data.items.length > 0;
   const share = shares.find((s) => s.kind !== 'delivery') ?? shares[0];
   const editedItems = edited.data?.items ?? [];
   const allItems = selected.data?.items ?? [];
