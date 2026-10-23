@@ -81,7 +81,7 @@ export function AlbumDialog({
                   type="button"
                   onClick={() => setThreshold(t)}
                   className={`flex flex-1 items-center justify-center gap-0.5 rounded-md py-1.5 text-sm font-medium transition ${
-                    threshold === t ? 'bg-primary-500 text-white' : 'text-gray-400 hover:text-gray-200'
+                    threshold === t ? 'bg-primary-500 text-on-accent' : 'text-gray-400 hover:text-gray-200'
                   }`}
                 >
                   <Star className="h-3.5 w-3.5 fill-current" />
@@ -110,7 +110,7 @@ export function AlbumDialog({
                 onClick={() => setName(a.name)}
                 className={`rounded-md px-2 py-1 text-xs transition ${
                   trimmed === a.name
-                    ? 'bg-primary-500 text-white'
+                    ? 'bg-primary-500 text-on-accent'
                     : 'bg-base text-gray-400 hover:text-gray-200'
                 }`}
               >
@@ -128,7 +128,7 @@ export function AlbumDialog({
               type="button"
               onClick={() => setFormats(o.value)}
               className={`flex-1 rounded-md py-1.5 text-xs font-medium transition ${
-                formats === o.value ? 'bg-primary-500 text-white' : 'text-gray-400 hover:text-gray-200'
+                formats === o.value ? 'bg-primary-500 text-on-accent' : 'text-gray-400 hover:text-gray-200'
               }`}
             >
               {o.label}
@@ -160,7 +160,7 @@ export function AlbumDialog({
             type="button"
             onClick={() => onConfirm({ name: trimmed, paths: candidate.map((i) => i.path), formats })}
             disabled={!canCreate}
-            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 py-2 text-sm font-medium text-white transition hover:bg-primary-500 disabled:opacity-40"
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 py-2 text-sm font-medium text-on-accent transition hover:bg-primary-500 disabled:opacity-40"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
             Create

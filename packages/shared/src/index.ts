@@ -28,6 +28,13 @@ export interface AuthResponse {
   user: AuthUser;
 }
 
+/** GET /api/auth/me: who's signed in plus the owner-app config it needs. */
+export interface MeResponse {
+  username: string;
+  brandName: string;        // SHARE_BRAND_NAME — shown in the owner app header too
+  pathPrefix: string;       // ALBUM_PATH_PREFIX — how the share is mounted on the editing machine ('' = unset)
+}
+
 // ── FTP receive (Phase 2) ──────────────────────────────────────────────────
 
 /** Persisted FTP receive settings (data/ftp.json). Holds the camera login. */

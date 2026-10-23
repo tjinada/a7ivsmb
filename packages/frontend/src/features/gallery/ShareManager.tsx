@@ -7,6 +7,8 @@ import { AuthImage } from './AuthImage';
 import { thumbUrl } from './mediaUrl';
 import { shareMessage } from './shareMessage';
 import { newProgressId, useShareProgress } from './useShareProgress';
+import { toast } from '@/components/Toast';
+import { ConfirmDialog } from './ConfirmDialog';
 
 async function fetchShares(): Promise<ShareSummary[]> {
   const res = await api.get<ApiResponse<ShareSummary[]>>('/gallery/shares');
@@ -33,25 +35,26 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [copiedNamesId, setCopiedNamesId] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<ShareSummary | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['shares'] });
 
   const deliveryMut = useMutation({
     mutationFn: (id: string) => api.post(`/gallery/shares/${id}/delivery`),
     onSuccess: invalidate,
-    onError: () => window.alert('Could not send the final photos'),
+    onError: () => toast.error('Could not send the final photos'),
   });
   const refreshMut = useMutation({
     mutationFn: ({ id, pid }: { id: string; pid: string }) =>
       api.post(`/gallery/shares/${id}/refresh`, { progressId: pid }),
     onSuccess: invalidate,
-    onError: () => window.alert('Could not refresh previews'),
+    onError: () => toast.error('Could not refresh previews'),
   });
   const refreshProgress = useShareProgress(refreshMut.variables?.pid ?? null, refreshMut.isPending).data;
   const revokeMut = useMutation({
     mutationFn: (id: string) => api.delete(`/gallery/shares/${id}`),
-    onSuccess: invalidate,
-    onError: () => window.alert('Could not disable the link'),
+    onSuccess: () => { setRevoking(null); invalidate(); },
+    onError: () => toast.error('Could not disable the link'),
   });
 
   const copy = async (s: ShareSummary) => {
@@ -77,11 +80,7 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const revoke = (s: ShareSummary) => {
-    if (window.confirm(`Disable the link for "${s.albumName}"? The client will no longer be able to open it.`)) {
-      revokeMut.mutate(s.id);
-    }
-  };
+  const revoke = (s: ShareSummary) => setRevoking(s);
 
   const shares = sharesQuery.data ?? [];
 
@@ -263,6 +262,16 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
           )}
         </div>
       </div>
+      {revoking && (
+        <ConfirmDialog
+          title={`Disable the link for "${revoking.albumName}"?`}
+          message="The client will no longer be able to open it. Their picks are kept."
+          confirmLabel="Disable link"
+          busy={revokeMut.isPending}
+          onConfirm={() => revokeMut.mutate(revoking.id)}
+          onCancel={() => setRevoking(null)}
+        />
+      )}
     </div>
   );
 }

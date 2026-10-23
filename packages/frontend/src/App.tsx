@@ -1,7 +1,5 @@
-import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
-import { api } from '@/api/client';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { GalleryPage } from '@/features/gallery/GalleryPage';
@@ -12,12 +10,8 @@ import { Toaster } from '@/components/Toast';
 
 export default function App() {
   const token = useAuthStore((s) => s.token);
-
-  // Ensure the read-only media cookie exists for plain <img> loads. Covers
-  // sessions that predate the cookie and refreshes its 30-day window on launch.
-  useEffect(() => {
-    if (token) api.get('/auth/me').catch(() => {});
-  }, [token]);
+  // The read-only media cookie for plain <img> loads is refreshed by the
+  // /auth/me call inside useAppConfig (mounted by AppLayout on every launch).
 
   return (
     <>

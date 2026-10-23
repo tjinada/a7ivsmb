@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { CalendarClock, Loader2, ArrowRight } from 'lucide-react';
 import type { ApiResponse, BackfillScanResult, BackfillApplyResult } from '@sonycam/shared';
 import { api } from '@/api/client';
+import { toast } from '@/components/Toast';
 
 /**
  * Re-file misdated photos in one folder by their EXIF capture date. Runs a
@@ -24,7 +25,7 @@ export function BackfillDialog({
 
   const scanMut = useMutation({
     mutationFn: () => api.post<ApiResponse<BackfillScanResult>>('/gallery/backfill/scan', { path }),
-    onError: () => window.alert('Could not scan this folder'),
+    onError: () => toast.error('Could not scan this folder'),
   });
   const applyMut = useMutation({
     mutationFn: () => api.post<ApiResponse<BackfillApplyResult>>('/gallery/backfill/apply', { path }),
@@ -32,7 +33,7 @@ export function BackfillDialog({
       setResult(res.data.data ?? { moved: 0, skipped: 0, failed: 0 });
       onApplied();
     },
-    onError: () => window.alert('Could not move the files'),
+    onError: () => toast.error('Could not move the files'),
   });
 
   // Kick off the dry-run once when the dialog mounts.
@@ -126,7 +127,7 @@ export function BackfillDialog({
               type="button"
               onClick={() => applyMut.mutate()}
               disabled={busy}
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 py-2 text-sm font-medium text-white transition hover:bg-primary-500 disabled:opacity-50"
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 py-2 text-sm font-medium text-on-accent transition hover:bg-primary-500 disabled:opacity-50"
             >
               {applyMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
               Move {scan.toMove} file{scan.toMove === 1 ? '' : 's'}

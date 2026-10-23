@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw, Save } from 'lucide-react';
 import type { ApiResponse, FtpStatus, FtpConfigView } from '@sonycam/shared';
 import { api } from '@/api/client';
+import { toast } from '@/components/Toast';
+import { ConfirmDialog } from '../gallery/ConfirmDialog';
 
 async function fetchStatus(): Promise<FtpStatus | null> {
   const res = await api.get<ApiResponse<FtpStatus>>('/ftp/status');
@@ -53,6 +55,7 @@ export function FtpCard() {
   const configQuery = useQuery({ queryKey: ['ftp-config'], queryFn: fetchConfig });
 
   const [form, setForm] = useState<FormState | null>(null);
+  const [confirmRestart, setConfirmRestart] = useState(false);
   useEffect(() => {
     const c = configQuery.data;
     if (c && form === null) {
@@ -77,30 +80,25 @@ export function FtpCard() {
       setForm((f) => (f ? { ...f, pass: '' } : f)); // password applied; clear the field
       invalidate();
     },
-    onError: (err) => window.alert(serverMessage(err, 'Could not save the FTP settings')),
+    onError: (err) => toast.error(serverMessage(err, 'Could not save the FTP settings')),
   });
 
   const restartMut = useMutation({
     mutationFn: () => api.post('/ftp/restart'),
     onSuccess: invalidate,
-    onError: (err) => window.alert(serverMessage(err, 'Could not restart the FTP server')),
+    onError: (err) => toast.error(serverMessage(err, 'Could not restart the FTP server')),
   });
 
+  const activeConns = statusQuery.data?.activeConnections ?? 0;
   const restart = () => {
-    const active = statusQuery.data?.activeConnections ?? 0;
-    if (
-      active > 0 &&
-      !window.confirm(`The camera has ${active} active connection${active === 1 ? '' : 's'}. Restarting will drop any transfer in progress. Restart anyway?`)
-    ) {
-      return;
-    }
-    restartMut.mutate();
+    if (activeConns > 0) setConfirmRestart(true);
+    else restartMut.mutate();
   };
 
   const save = () => {
     if (!form) return;
     if (form.enabled && !form.pass && !configQuery.data?.passSet) {
-      window.alert('Set a password before enabling FTP');
+      toast.error('Set a password before enabling FTP');
       return;
     }
     saveMut.mutate(form);
@@ -199,7 +197,7 @@ export function FtpCard() {
             type="button"
             onClick={save}
             disabled={busy}
-            className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-primary-500 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-xs font-medium text-on-accent transition hover:bg-primary-500 disabled:opacity-50"
           >
             {saveMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             Save &amp; apply
@@ -220,6 +218,17 @@ export function FtpCard() {
           ports published in docker-compose, so changing them needs a container recreate.
         </p>
       </div>
+
+      {confirmRestart && (
+        <ConfirmDialog
+          title="Restart the FTP server?"
+          message={`The camera has ${activeConns} active connection${activeConns === 1 ? '' : 's'}. Restarting will drop any transfer in progress.`}
+          confirmLabel="Restart"
+          busy={restartMut.isPending}
+          onConfirm={() => { setConfirmRestart(false); restartMut.mutate(); }}
+          onCancel={() => setConfirmRestart(false)}
+        />
+      )}
 
       <div className="mt-4 rounded-lg border border-border bg-base p-3">
         <p className="mb-1.5 text-xs font-semibold text-gray-200">Camera setup (A7 IV FTP transfer)</p>

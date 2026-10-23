@@ -1,4 +1,6 @@
 import { useAuthStore } from '@/stores/authStore';
+import { api } from '@/api/client';
+import { useAppConfig } from '@/lib/useAppConfig';
 import { FtpCard } from './FtpCard';
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -12,12 +14,20 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export function SettingsPage() {
   const { user, clear } = useAuthStore();
+  const { brandName } = useAppConfig();
+
+  const signOut = () => {
+    // Best-effort: clear the server-set media cookie, then drop local tokens.
+    api.post('/auth/logout').catch(() => {});
+    clear();
+  };
 
   return (
     <div className="mx-auto max-w-md p-4">
       <h1 className="mb-4 text-lg font-semibold">Settings</h1>
 
       <div className="rounded-xl border border-border bg-surface p-4 text-sm">
+        <Row label="Brand" value={brandName} />
         <Row label="Signed in as" value={user?.username ?? '—'} />
         <Row label="App version" value={__APP_VERSION__} />
       </div>
@@ -26,7 +36,7 @@ export function SettingsPage() {
 
       <button
         type="button"
-        onClick={clear}
+        onClick={signOut}
         className="mt-6 w-full rounded-lg border border-border py-2.5 text-sm text-gray-200 transition-colors hover:border-primary-500"
       >
         Sign out

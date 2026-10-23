@@ -50,7 +50,7 @@ export function CleanupDialog({
               type="button"
               onClick={() => setThreshold(t)}
               className={`flex flex-1 items-center justify-center gap-0.5 rounded-md py-1.5 text-sm font-medium transition ${
-                threshold === t ? 'bg-primary-500 text-white' : 'text-gray-400 hover:text-gray-200'
+                threshold === t ? 'bg-primary-500 text-on-accent' : 'text-gray-400 hover:text-gray-200'
               }`}
             >
               <Star className="h-3.5 w-3.5 fill-current" />

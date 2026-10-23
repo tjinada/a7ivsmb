@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { Camera, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { BrandMark } from '@/components/layout/AppLayout';
 import type { ApiResponse, AuthResponse } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { useAuthStore } from '@/stores/authStore';
@@ -32,11 +33,9 @@ export function LoginPage() {
   return (
     <div className="flex min-h-full items-center justify-center p-4">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-xl">
-        <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-600">
-            <Camera className="h-6 w-6 text-white" />
-          </div>
-          <h1 className="text-lg font-semibold">Sony Transfer</h1>
+        <div className="mb-6 flex flex-col items-center gap-3">
+          <BrandMark size={40} />
+          <h1 className="text-lg font-semibold">Sign in</h1>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
@@ -63,7 +62,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-1 flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-primary-600 font-medium text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
+            className="mt-1 flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-primary-600 font-medium text-on-accent transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Sign in'}
           </button>

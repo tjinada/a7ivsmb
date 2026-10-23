@@ -4,6 +4,8 @@ import { loginSchema, refreshSchema } from './auth.validation.js';
 import { sendSuccess } from '../../utils/response.js';
 import { AppError, setMediaCookie, clearMediaCookie } from '../../middleware/index.js';
 import type { TokenPayload } from '../../middleware/index.js';
+import type { MeResponse } from '@sonycam/shared';
+import { config } from '../../config/index.js';
 
 export const authController = {
   login(req: Request, res: Response, next: NextFunction): void {
@@ -38,6 +40,11 @@ export const authController = {
     // Refresh the read-only media cookie so plain <img> loads keep working
     // (also seeds it for sessions that predate the cookie).
     if (user?.username) setMediaCookie(res, user.username);
-    sendSuccess(res, { username: user?.username });
+    const body: MeResponse = {
+      username: user?.username ?? '',
+      brandName: config.shares.brandName,
+      pathPrefix: config.albumPathPrefix,
+    };
+    sendSuccess(res, body);
   },
 };

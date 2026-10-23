@@ -77,7 +77,7 @@ export function EditedUpload({
 
   const cls =
     tone === 'primary'
-      ? 'rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-500 disabled:opacity-50'
+      ? 'rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-on-accent transition hover:bg-primary-500 disabled:opacity-50'
       : 'rounded-lg border border-border px-2.5 py-1.5 text-xs text-gray-200 transition hover:bg-surface disabled:opacity-50';
 
   return (

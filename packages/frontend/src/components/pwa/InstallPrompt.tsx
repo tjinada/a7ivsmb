@@ -49,7 +49,7 @@ export function InstallPrompt() {
           <p className="text-sm font-medium">Install Sony Transfer</p>
           <p className="text-xs text-gray-400">Add it to your home screen for quick access.</p>
         </div>
-        <button type="button" onClick={install} className="rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white hover:bg-primary-700">
+        <button type="button" onClick={install} className="rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-on-accent hover:bg-primary-700">
           Install
         </button>
         <button type="button" onClick={() => setShow(false)} aria-label="Dismiss" className="text-gray-500 hover:text-gray-300">

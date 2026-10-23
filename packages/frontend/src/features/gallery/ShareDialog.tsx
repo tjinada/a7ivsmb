@@ -108,14 +108,14 @@ export function ShareDialog({
               <button
                 type="button"
                 onClick={() => setKind('proofing')}
-                className={`flex-1 py-2 text-sm transition ${kind === 'proofing' ? 'bg-primary-600 font-medium text-white' : 'bg-base text-gray-300 hover:bg-border'}`}
+                className={`flex-1 py-2 text-sm transition ${kind === 'proofing' ? 'bg-primary-600 font-medium text-on-accent' : 'bg-base text-gray-300 hover:bg-border'}`}
               >
                 Client picks
               </button>
               <button
                 type="button"
                 onClick={() => setKind('delivery')}
-                className={`flex-1 py-2 text-sm transition ${kind === 'delivery' ? 'bg-primary-600 font-medium text-white' : 'bg-base text-gray-300 hover:bg-border'}`}
+                className={`flex-1 py-2 text-sm transition ${kind === 'delivery' ? 'bg-primary-600 font-medium text-on-accent' : 'bg-base text-gray-300 hover:bg-border'}`}
               >
                 Download all
               </button>
@@ -189,7 +189,7 @@ export function ShareDialog({
                   createMut.mutate(pid);
                 }}
                 disabled={!canCreate}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 py-2 text-sm font-medium text-white transition hover:bg-primary-500 disabled:opacity-40"
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 py-2 text-sm font-medium text-on-accent transition hover:bg-primary-500 disabled:opacity-40"
               >
                 {createMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
                 Create link
@@ -209,7 +209,7 @@ export function ShareDialog({
               <button
                 type="button"
                 onClick={copyLink}
-                className="flex flex-shrink-0 items-center gap-1.5 rounded-md bg-primary-600 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-primary-500"
+                className="flex flex-shrink-0 items-center gap-1.5 rounded-md bg-primary-600 px-2.5 py-1.5 text-xs font-medium text-on-accent transition hover:bg-primary-500"
               >
                 {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                 {copied ? 'Copied' : 'Copy'}
@@ -234,7 +234,7 @@ export function ShareDialog({
             <button
               type="button"
               onClick={onClose}
-              className="mt-5 w-full rounded-lg bg-primary-600 py-2 text-sm font-medium text-white transition hover:bg-primary-500"
+              className="mt-5 w-full rounded-lg bg-primary-600 py-2 text-sm font-medium text-on-accent transition hover:bg-primary-500"
             >
               Done
             </button>

@@ -1,3 +1,7 @@
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url(/fonts/inter-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url(/fonts/inter-latin-500-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url(/fonts/inter-latin-600-normal.woff2) format('woff2'); }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -19,7 +23,7 @@ body {
      animated — an animated gradient repaints every frame on every unloaded
      tile, which is the largest single source of scroll jank in a big grid. */
   .img-placeholder {
-    background: linear-gradient(105deg, #151a23 40%, #1c2330 50%, #151a23 60%);
+    background: linear-gradient(105deg, #1c1c1c 40%, #242424 50%, #1c1c1c 60%);
   }
 
   /* iOS safe-area insets (notch / Dynamic Island / home indicator).

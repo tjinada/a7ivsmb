@@ -35,7 +35,7 @@ export function PWAUpdatePrompt() {
 
   return (
     <div className="fixed left-4 right-4 top-[max(1rem,env(safe-area-inset-top))] z-[9999] sm:left-auto sm:right-4 sm:w-80">
-      <div className="rounded-2xl bg-primary-600 p-4 text-white shadow-lg">
+      <div className="rounded-2xl bg-primary-600 p-4 text-on-accent shadow-lg">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white/20">
             <RefreshCw className="h-5 w-5" />

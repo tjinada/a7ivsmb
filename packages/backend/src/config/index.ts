@@ -95,6 +95,11 @@ export const config = {
     // Grid thumbnail size (long edge) for the client page.
     thumbMaxEdge: Number(process.env.SHARE_THUMB_MAX_EDGE ?? 480),
   },
+
+  // How the photos share is mounted on the owner's editing machine, so the
+  // app can offer "copy folder path" for an album's Edited/ folder. e.g.
+  // \\unraid\data\mekala-share or /Volumes/mekala-share. Blank = no button.
+  albumPathPrefix: (process.env.ALBUM_PATH_PREFIX ?? '').trim(),
 } as const;
 
 /** Refuse to start in production with insecure auth config (S1 hardening).

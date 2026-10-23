@@ -135,7 +135,7 @@ export function Lightbox({
           onClick={() => setShowInfo((v) => !v)}
           aria-label="Info"
           className={`flex h-9 w-9 items-center justify-center rounded-lg transition ${
-            showInfo ? 'bg-primary-500 text-white' : 'bg-white/10 hover:bg-white/20'
+            showInfo ? 'bg-primary-500 text-on-accent' : 'bg-white/10 hover:bg-white/20'
           }`}
         >
           <Info className="h-5 w-5" />

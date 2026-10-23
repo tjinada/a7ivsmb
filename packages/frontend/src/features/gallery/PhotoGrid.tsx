@@ -50,7 +50,7 @@ export function PhotoTile({
       )}
       {selecting && (
         <div className="absolute right-1 top-1">
-          {selected ? <CheckCircle2 className="h-5 w-5 fill-primary-500 text-white" /> : <Circle className="h-5 w-5 text-white/80 drop-shadow" />}
+          {selected ? <CheckCircle2 className="h-5 w-5 fill-primary-500 text-on-accent" /> : <Circle className="h-5 w-5 text-white/80 drop-shadow" />}
         </div>
       )}
     </button>

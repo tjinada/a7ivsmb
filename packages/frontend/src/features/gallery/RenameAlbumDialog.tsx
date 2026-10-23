@@ -54,7 +54,7 @@ export function RenameAlbumDialog({
             type="button"
             onClick={() => onConfirm(trimmed)}
             disabled={!canRename}
-            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 py-2 text-sm font-medium text-white transition hover:bg-primary-500 disabled:opacity-40"
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary-600 py-2 text-sm font-medium text-on-accent transition hover:bg-primary-500 disabled:opacity-40"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
             Rename

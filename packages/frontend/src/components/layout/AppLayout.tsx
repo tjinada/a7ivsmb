@@ -1,36 +1,31 @@
 import type { ReactNode } from 'react';
-import { LogOut } from 'lucide-react';
-import { useAuthStore } from '@/stores/authStore';
-import { api } from '@/api/client';
+import { useAppConfig } from '@/lib/useAppConfig';
 import { TabBar } from './TabBar';
 
-export function AppLayout({ children }: { children: ReactNode }) {
-  const { user, clear } = useAuthStore();
+/** The amber aperture mark used on the client page and the OG card. */
+export function BrandMark({ size = 18 }: { size?: number }) {
+  return (
+    <span
+      aria-hidden
+      className="relative inline-block flex-none rounded-full border-2 border-primary-500"
+      style={{ width: size, height: size }}
+    >
+      <span className="absolute rounded-full bg-primary-500" style={{ inset: Math.round(size * 0.22) }} />
+    </span>
+  );
+}
 
-  const signOut = () => {
-    // Best-effort: clear the server-set media cookie, then drop local tokens.
-    api.post('/auth/logout').catch(() => {});
-    clear();
-  };
+export function AppLayout({ children }: { children: ReactNode }) {
+  const { brandName } = useAppConfig();
 
   return (
     <div className="flex flex-col" style={{ height: '100dvh' }}>
       <header
-        className="flex flex-shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-2"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
+        className="flex flex-shrink-0 items-center gap-2.5 border-b border-border bg-base px-4 py-2.5"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.625rem)' }}
       >
-        <span className="font-semibold">Sony Transfer</span>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-400">{user?.username}</span>
-          <button
-            type="button"
-            onClick={signOut}
-            aria-label="Sign out"
-            className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-border"
-          >
-            <LogOut className="h-5 w-5" />
-          </button>
-        </div>
+        <BrandMark />
+        <span className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">{brandName}</span>
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
       <TabBar />
