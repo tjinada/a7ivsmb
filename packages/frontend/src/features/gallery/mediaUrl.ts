@@ -26,3 +26,10 @@ export function thumbUrl(path: string, version?: number): string {
 export function previewUrl(path: string, version?: number): string {
   return renditionUrl('preview', path, version);
 }
+
+/** The untouched original file (cookie-authed, like the renditions). Browsers
+ *  apply a JPEG's EXIF orientation themselves. Only displayable for JPG etc.,
+ *  not RAW. */
+export function originalUrl(path: string): string {
+  return `/api/gallery/original?path=${encodeURIComponent(path)}`;
+}

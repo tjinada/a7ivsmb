@@ -6,7 +6,7 @@ import { api } from '@/api/client';
 import { toast } from '@/components/Toast';
 import { prettyDate } from '@/lib/dates';
 import { useBrowse, useRate, useDeleteItems, useInvalidateGallery } from '@/features/gallery/api';
-import { thumbUrl, previewUrl } from '@/features/gallery/mediaUrl';
+import { thumbUrl, previewUrl, originalUrl } from '@/features/gallery/mediaUrl';
 import { ConfirmDialog } from '@/features/gallery/ConfirmDialog';
 
 /** Reject is stored as 1 star, so the existing "delete below 2" cleanup and
@@ -24,11 +24,21 @@ function stampTone(stars: number): { badge: string; ring: string; label: string 
 }
 
 /** Which items a folder is culled over: the JPGs (RAW twins are rated with
- *  them server-side), or the RAWs when a folder has only RAW. */
+ *  them server-side), or the RAWs when a folder has only RAW. In shooting
+ *  order, oldest first (the folder lists newest first): arrival time, then
+ *  the camera's file number. */
 function cullable(items: GalleryItem[]): GalleryItem[] {
   const jpgs = items.filter((i) => i.kind === 'image');
-  return jpgs.length > 0 ? jpgs : items.filter((i) => i.kind === 'raw');
+  const pick = jpgs.length > 0 ? jpgs : items.filter((i) => i.kind === 'raw');
+  return [...pick].sort((a, b) => a.modified - b.modified || a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
+
+/** Pan/zoom of the photo: scale, and offset (px) from the stage centre. */
+interface Zoom { s: number; x: number; y: number }
+const FIT: Zoom = { s: 1, x: 0, y: 0 };
+const MAX_ZOOM = 8;
+const TAP_ZOOM = 2.5;
+const clampNum = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /**
  * Cull mode: one photo at a time, rate it, a stamp confirms the rating and it
@@ -131,6 +141,85 @@ export function CullPage() {
     fxTimer.current = window.setTimeout(advance, reduceMotion ? 250 : 350);
   }, [idx, current, list, advance, rateMut, reduceMotion]);
 
+  // ── Zoom ────────────────────────────────────────────────────────────────
+  // Web: scroll wheel zooms toward the cursor, drag pans, double-click
+  // toggles. Phone: pinch, double-tap toggles, one finger pans while zoomed.
+  // Every photo opens fitted.
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState<Zoom>(FIT);
+  const [zoomLive, setZoomLive] = useState(false); // finger/mouse is moving it: no easing
+  const zoomed = zoom.s > 1.01;
+  const currentPath = current?.path;
+  useEffect(() => { setZoom(FIT); }, [currentPath]);
+
+  /** Keep the zoomed photo covering the stage: never pan past its edges. */
+  const clampZoom = useCallback((z: Zoom): Zoom => {
+    const img = stageRef.current?.querySelector<HTMLImageElement>('img[data-cull-preview]');
+    const box = img?.parentElement;
+    if (!img || !box || z.s <= 1.01) return FIT;
+    const s = Math.min(z.s, MAX_ZOOM);
+    const bw = box.clientWidth, bh = box.clientHeight;
+    const ar = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : bw / bh;
+    const dw = Math.min(bw, bh * ar), dh = dw / ar; // the photo's fitted size
+    const mx = Math.max(0, (dw * s - bw) / 2), my = Math.max(0, (dh * s - bh) / 2);
+    return { s, x: clampNum(z.x, -mx, mx), y: clampNum(z.y, -my, my) };
+  }, []);
+
+  /** Scale to `target`, keeping the photo point under (px, py) where it is. */
+  const zoomAround = useCallback((z: Zoom, px: number, py: number, target: number): Zoom => {
+    const s = clampNum(target, 1, MAX_ZOOM);
+    const k = s / z.s;
+    return clampZoom({ s, x: px - (px - z.x) * k, y: py - (py - z.y) * k });
+  }, [clampZoom]);
+
+  /** A screen point as an offset from the stage centre. */
+  const fromCentre = (cx: number, cy: number): [number, number] => {
+    const r = stageRef.current?.getBoundingClientRect();
+    return r ? [cx - (r.left + r.width / 2), cy - (r.top + r.height / 2)] : [0, 0];
+  };
+
+  // Wheel needs a non-passive listener so it can stop the page (and the
+  // trackpad pinch, which arrives as ctrl+wheel) from zooming the browser.
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+      const factor = Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.002));
+      const [px, py] = fromCentre(e.clientX, e.clientY);
+      setZoomLive(false);
+      setZoom((z) => zoomAround(z, px, py, z.s * factor));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoomAround]);
+
+  // Mouse: drag to pan while zoomed, double-click to toggle.
+  const pan = useRef<{ x: number; y: number; zx: number; zy: number } | null>(null);
+  const lastPointer = useRef<string>('mouse');
+  const onPointerDown = (e: React.PointerEvent) => {
+    lastPointer.current = e.pointerType;
+    if (e.pointerType !== 'mouse' || e.button !== 0 || !zoomed) return;
+    if ((e.target as HTMLElement).closest('button')) return;
+    pan.current = { x: e.clientX, y: e.clientY, zx: zoom.x, zy: zoom.y };
+    setZoomLive(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const p = pan.current;
+    if (!p) return;
+    setZoom((z) => clampZoom({ s: z.s, x: p.zx + e.clientX - p.x, y: p.zy + e.clientY - p.y }));
+  };
+  const onPointerUp = () => { pan.current = null; setZoomLive(false); };
+  const onDoubleClick = (e: React.MouseEvent) => {
+    if (lastPointer.current !== 'mouse' || !current) return;
+    if ((e.target as HTMLElement).closest('button')) return;
+    const [px, py] = fromCentre(e.clientX, e.clientY);
+    setZoomLive(false);
+    setZoom((z) => (z.s > 1.01 ? FIT : zoomAround(z, px, py, TAP_ZOOM)));
+  };
+
   // Keyboard.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -139,11 +228,12 @@ export function CullPage() {
       else if (e.key === 'x' || e.key === 'X') rate(REJECT);
       else if (e.key === 'ArrowLeft') move(-1);
       else if (e.key === 'ArrowRight') move(1);
-      else if (e.key === 'Escape') exit();
+      else if (e.key === '0') setZoom(FIT);
+      else if (e.key === 'Escape') { if (zoomed) setZoom(FIT); else exit(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [rate, move, exit, confirmDelete]);
+  }, [rate, move, exit, confirmDelete, zoomed]);
 
   // Preload the next preview so advancing is instant.
   useEffect(() => {
@@ -153,27 +243,87 @@ export function CullPage() {
     im.src = previewUrl(next.path, next.modified);
   }, [idx, list]);
 
-  // Touch: vertical swipe rates (the photo follows the finger and the stamp
-  // fades in as it nears the threshold), horizontal moves. The axis locks on
-  // the first clear movement so a sideways swipe never drags the photo.
-  const touch = useRef<{ x: number; y: number; axis: 'v' | 'h' | null } | null>(null);
+  // Touch. Fitted: vertical swipe rates (the photo follows the finger and the
+  // stamp fades in as it nears the threshold), horizontal moves; the axis
+  // locks on the first clear movement. Zoomed: one finger pans and nothing
+  // rates. Two fingers pinch at any time; a double-tap toggles zoom.
+  type TouchState =
+    | { mode: 'swipe'; x: number; y: number; axis: 'v' | 'h' | null }
+    | { mode: 'pan'; x: number; y: number; z0: Zoom }
+    | { mode: 'pinch'; d0: number; mx: number; my: number; z0: Zoom };
+  const touch = useRef<TouchState | null>(null);
+  const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
+  const pinchOf = (e: TouchEvent) => {
+    const [a, b] = [e.touches[0], e.touches[1]];
+    const [mx, my] = fromCentre((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
+    return { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), mx, my };
+  };
   const onTouchStart = (e: TouchEvent) => {
-    touch.current = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, axis: null } : null;
+    if (e.touches.length === 2) {
+      const p = pinchOf(e);
+      touch.current = { mode: 'pinch', d0: p.d || 1, mx: p.mx, my: p.my, z0: zoom };
+      setDragging(false);
+      setDrag(0);
+      setZoomLive(true);
+      return;
+    }
+    if (e.touches.length !== 1) { touch.current = null; return; }
+    const { clientX: x, clientY: y } = e.touches[0];
+    touch.current = zoomed ? { mode: 'pan', x, y, z0: zoom } : { mode: 'swipe', x, y, axis: null };
+    if (zoomed) setZoomLive(true);
   };
   const onTouchMove = (e: TouchEvent) => {
     const s = touch.current;
     if (!s) return;
+    if (s.mode === 'pinch') {
+      if (e.touches.length < 2) return;
+      const p = pinchOf(e);
+      const target = clampNum(s.z0.s * (p.d / s.d0), 1, MAX_ZOOM);
+      // The photo point that was under the fingers stays under them.
+      const ux = (s.mx - s.z0.x) / s.z0.s, uy = (s.my - s.z0.y) / s.z0.s;
+      setZoom(clampZoom({ s: target, x: p.mx - ux * target, y: p.my - uy * target }));
+      return;
+    }
     const dx = e.touches[0].clientX - s.x, dy = e.touches[0].clientY - s.y;
+    if (s.mode === 'pan') {
+      setZoom(clampZoom({ s: s.z0.s, x: s.z0.x + dx, y: s.z0.y + dy }));
+      return;
+    }
     if (!s.axis && Math.max(Math.abs(dx), Math.abs(dy)) > 10) s.axis = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
     if (s.axis === 'v' && !reduceMotion && fxTimer.current === null) { setDragging(true); setDrag(dy); }
   };
   const onTouchEnd = (e: TouchEvent) => {
     const s = touch.current;
+    if (!s) return;
+    if (s.mode === 'pinch') {
+      if (e.touches.length > 0) return; // wait for the last finger
+      touch.current = null;
+      setZoomLive(false);
+      setZoom((z) => (z.s < 1.05 ? FIT : z));
+      return;
+    }
     touch.current = null;
     setDragging(false);
-    if (!s) return;
+    setZoomLive(false);
     const t = e.changedTouches[0];
     const dx = t.clientX - s.x, dy = t.clientY - s.y;
+
+    // A tap (barely moved): two in quick succession toggle zoom there.
+    if (Math.hypot(dx, dy) < 10) {
+      setDrag(0);
+      const now = Date.now();
+      const prev = lastTap.current;
+      if (prev && now - prev.t < 300 && Math.hypot(t.clientX - prev.x, t.clientY - prev.y) < 30) {
+        lastTap.current = null;
+        const [px, py] = fromCentre(t.clientX, t.clientY);
+        setZoom((z) => (z.s > 1.01 ? FIT : zoomAround(z, px, py, TAP_ZOOM)));
+      } else {
+        lastTap.current = { t: now, x: t.clientX, y: t.clientY };
+      }
+      return;
+    }
+    if (s.mode === 'pan') return;
+
     if (s.axis !== 'h' && Math.abs(dy) > SWIPE_RATE && Math.abs(dy) > Math.abs(dx) * 1.5) rate(dy < 0 ? 5 : REJECT);
     else {
       setDrag(0); // short of the threshold: snap back, no rating
@@ -224,11 +374,19 @@ export function CullPage() {
 
       {/* Stage */}
       <div
-        className="relative flex min-h-0 flex-1 touch-none items-center justify-center overflow-hidden p-2"
+        ref={stageRef}
+        className={`relative flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden p-2 ${
+          zoomed ? (zoomLive ? 'cursor-grabbing' : 'cursor-grab') : ''
+        }`}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
-        onTouchCancel={() => { touch.current = null; setDragging(false); setDrag(0); }}
+        onTouchCancel={() => { touch.current = null; setDragging(false); setDrag(0); setZoomLive(false); }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onDoubleClick={onDoubleClick}
       >
         {browse.isLoading || (bucket && bucketQuery.isLoading) ? (
           <Loader2 className="h-8 w-8 animate-spin text-white/60" />
@@ -246,8 +404,20 @@ export function CullPage() {
               dragging,
               exit: stamped === null || reduceMotion ? null : stamped === 5 ? 'up' : stamped === REJECT ? 'down' : 'fade',
             }}
+            zoom={zoom}
+            zoomLive={zoomLive}
           />
         ) : null}
+
+        {current && zoomed && (
+          <button
+            type="button"
+            onClick={() => setZoom(FIT)}
+            className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-base/80 px-3 py-1.5 text-xs font-semibold text-gray-200 backdrop-blur-sm hover:bg-base"
+          >
+            {zoom.s.toFixed(1)}× · <span className="text-gray-400">tap to fit</span>
+          </button>
+        )}
 
         {current && (stamped !== null || preview) && (
           <RatingStamp key={stamped !== null ? `fx-${current.path}` : 'drag'} stars={stamped ?? preview!.stars} strength={stamped !== null ? 1 : preview!.strength} pop={stamped !== null && !reduceMotion} />
@@ -281,8 +451,8 @@ export function CullPage() {
           </div>
           <div className="flex items-center justify-between gap-3 text-xs text-gray-400">
             <span className="min-w-0 truncate">
-              <span className="sm:hidden">Swipe up ★5 · down rejects · sideways moves</span>
-              <span className="hidden sm:inline">Rating advances to the next photo · keys 1–5 rate · X rejects · ←/→ move · Esc exits</span>
+              <span className="sm:hidden">Swipe up ★5 · down rejects · pinch or double-tap to zoom</span>
+              <span className="hidden sm:inline">Keys 1–5 rate · X rejects · ←/→ move · scroll to zoom, drag to pan · Esc exits</span>
             </span>
             <button
               type="button"
@@ -336,10 +506,22 @@ function stageStyle({ drag, dragging, exit }: StageMotion): React.CSSProperties 
 
 /** The photo itself with the filename / exposure chips. Keyed by path so load
  *  state resets per photo. */
-function Stage({ item, rating, motion }: { item: GalleryItem; rating: number; motion: StageMotion }) {
+function Stage({ item, rating, motion, zoom, zoomLive }: {
+  item: GalleryItem;
+  rating: number;
+  motion: StageMotion;
+  zoom: Zoom;
+  zoomLive: boolean;
+}) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [exif, setExif] = useState<ExifInfo | null>(null);
+  // Zooming past the preview's resolution swaps in the original (JPG only; a
+  // browser can't show RAW). Once asked for, it stays for this photo.
+  const zoomed = zoom.s > 1.01;
+  const [wantFull, setWantFull] = useState(false);
+  const [fullLoaded, setFullLoaded] = useState(false);
+  useEffect(() => { if (zoomed && item.kind === 'image') setWantFull(true); }, [zoomed, item.kind]);
 
   useEffect(() => {
     let live = true;
@@ -354,24 +536,51 @@ function Stage({ item, rating, motion }: { item: GalleryItem; rating: number; mo
 
   return (
     <>
-      <div className="absolute inset-2 flex items-center justify-center will-change-transform" style={stageStyle(motion)}>
+      {/* No will-change here: it pins the raster scale, so a zoomed photo
+          would stay at screen resolution instead of showing the original. */}
+      <div className="absolute inset-2" style={stageStyle(motion)}>
         {failed ? (
-          <div className="flex flex-col items-center gap-2 text-white/60"><ImageOff className="h-10 w-10" /><p className="text-sm">Preview unavailable</p></div>
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-white/60"><ImageOff className="h-10 w-10" /><p className="text-sm">Preview unavailable</p></div>
         ) : (
-          <>
+          // The zoom layer: every image fills it with object-contain, so the
+          // preview, its blurred placeholder and the original all line up.
+          <div
+            className="absolute inset-0"
+            style={{
+              transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`,
+              transition: zoomLive ? 'none' : 'transform 120ms ease-out',
+            }}
+          >
             {!loaded && (
-              <img src={thumbUrl(item.path, item.modified)} alt="" aria-hidden className="absolute max-h-full max-w-full scale-[1.02] rounded object-contain blur-sm" />
+              <img src={thumbUrl(item.path, item.modified)} alt="" aria-hidden draggable={false} className="absolute inset-0 h-full w-full scale-[1.02] object-contain blur-sm" />
             )}
             <img
+              data-cull-preview
               src={previewUrl(item.path, item.modified)}
               alt={item.name}
+              draggable={false}
               onLoad={() => setLoaded(true)}
               onError={() => setFailed(true)}
-              className={`max-h-full max-w-full rounded object-contain transition-opacity duration-150 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+              className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-150 ${loaded ? 'opacity-100' : 'opacity-0'}`}
             />
-          </>
+            {wantFull && (
+              <img
+                src={originalUrl(item.path)}
+                alt=""
+                aria-hidden
+                draggable={false}
+                onLoad={() => setFullLoaded(true)}
+                className={`absolute inset-0 h-full w-full object-contain ${fullLoaded ? 'opacity-100' : 'opacity-0'}`}
+              />
+            )}
+          </div>
         )}
       </div>
+      {zoomed && wantFull && !fullLoaded && (
+        <span className="pointer-events-none absolute right-4 top-11 z-20 flex items-center gap-1.5 rounded-md bg-base/75 px-2 py-1 text-[11px] text-gray-300 backdrop-blur-sm">
+          <Loader2 className="h-3 w-3 animate-spin" /> Loading full resolution
+        </span>
+      )}
       <span className="pointer-events-none absolute left-4 top-3 rounded-md bg-base/75 px-2 py-1 text-[11px] font-semibold text-gray-300 backdrop-blur-sm">
         {item.name.replace(/\.[^.]+$/, '')}{item.twin ? ' · RAW+JPG' : item.kind === 'raw' ? ' · RAW' : ''}
         {stars && <span className={`ml-2 ${rating === REJECT ? 'text-red-400' : 'text-primary-400'}`}>{stars}</span>}
