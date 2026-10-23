@@ -62,6 +62,8 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 .hint { font-size: 12px; color: var(--faint); text-align: center; }
 .status { text-align: center; min-height: 18px; font-size: 13px; color: var(--muted); }
 .status.err { color: var(--danger); }
+.status.above { margin: 0 0 8px; }
+.status.above:empty { display: none; }
 @media (min-width: 900px) { .gate h1 { font-size: 40px; } }
 
 /* ── Gallery shell ──────────────────────────────────────────────────────── */
@@ -95,16 +97,44 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 .tile img.ok { opacity: 1; }
 .tile .open { position: absolute; inset: 0; border: 0; padding: 0; background: transparent; cursor: pointer; }
 .tile .open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.tile .heart, .tile .save { z-index: 1; }
-.tile .heart { position: absolute; top: 2px; right: 2px; width: 40px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; padding: 0; }
+.tile .mark, .tile .save { z-index: 1; }
+.tile .mark { position: absolute; top: 2px; right: 2px; width: 40px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; padding: 0; }
 .tile .heart svg { width: 22px; height: 22px; fill: rgba(0,0,0,.25); stroke: #fff; stroke-width: 1.8; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
 .tile.on .heart svg { fill: var(--accent); stroke: var(--on-accent); stroke-width: 1.2; }
+/* Final-pick tick: hollow circle, filled amber when chosen. Unchosen tiles dim
+   so the chosen set reads at a glance; the chosen ones get an inset ring. */
+.dot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff; background: rgba(0,0,0,.3); display: inline-flex; align-items: center; justify-content: center; color: var(--on-accent); box-shadow: 0 1px 2px rgba(0,0,0,.5); }
+.dot svg { width: 14px; height: 14px; opacity: 0; }
+.on .dot { background: var(--accent); border-color: var(--accent); }
+.on .dot svg { opacity: 1; }
+.tile.pick img { transition: opacity .25s, filter .2s; }
+.tile.pick:not(.on) img.ok { opacity: .55; }
+.tile.pick.on::after { content: ''; position: absolute; inset: 0; border-radius: 6px; box-shadow: inset 0 0 0 2px var(--accent); pointer-events: none; }
+.grid.dim .tile img.ok { opacity: .6; }
+.sec.dim { color: var(--faint); }
 .tile .save { position: absolute; right: 6px; bottom: 6px; height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: rgba(18,18,18,.78); color: var(--text); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
 @media (min-width: 900px) {
   .grid, .row { gap: 6px; }
-  .tile .heart { top: 6px; right: 6px; width: 44px; height: 44px; }
+  .tile .mark { top: 6px; right: 6px; width: 44px; height: 44px; }
   .tile .heart svg { width: 26px; height: 26px; }
+  .dot { width: 28px; height: 28px; }
+  .dot svg { width: 16px; height: 16px; }
+  .tile.pick.on::after { box-shadow: inset 0 0 0 3px var(--accent); }
   .tile .save { right: 10px; bottom: 10px; height: 36px; padding: 0 12px; font-size: 13px; }
+}
+
+/* ── Step header (final picks) ──────────────────────────────────────────── */
+.head.with-back { padding-left: 8px; }
+.head .back { flex: none; background: transparent; align-self: flex-start; }
+.head .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.prog .sub2 { font-size: 12px; color: var(--muted); font-weight: 400; }
+.final-prog { display: flex; align-items: center; gap: 12px; padding: 4px 4px 12px; }
+.final-prog .prog { flex: 1 1 auto; width: auto; }
+.wide-only { display: none !important; }
+@media (min-width: 900px) {
+  .head.with-back { padding-left: 28px; }
+  .head .back { background: rgba(255,255,255,.06); align-self: center; }
+  .wide-only { display: inline-flex !important; }
 }
 
 /* ── Phone footer bar (proofing) ────────────────────────────────────────── */
@@ -144,8 +174,14 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 .lb-tip { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-size: 12px; color: var(--faint); pointer-events: none; }
 .lb-bottom { padding: 12px 16px calc(var(--safe-bottom) + 14px); display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .lb-bottom .btn { width: 100%; max-width: 420px; min-height: 56px; border-radius: 14px; font-size: 16px; }
-.lb-bottom .btn.fav svg { width: 22px; height: 22px; fill: var(--on-accent); }
-.lb-bottom .btn.fav.off { background: var(--surface); border-color: var(--border-strong); color: var(--text); }
-.lb-bottom .btn.fav.off svg { fill: none; stroke: var(--text); stroke-width: 1.8; }
+.lb-bottom .btn.act svg { width: 22px; height: 22px; fill: var(--on-accent); }
+.lb-bottom .btn.act.off { background: var(--surface); border-color: var(--border-strong); color: var(--text); }
+.lb-bottom .btn.act.select.off svg { fill: none; stroke: var(--text); stroke-width: 1.8; }
+.lb-bottom .btn.act.final .dot { width: 24px; height: 24px; box-shadow: none; border-color: var(--on-accent); background: var(--on-accent); color: var(--accent); }
+.lb-bottom .btn.act.final .dot svg { width: 14px; height: 14px; fill: none; opacity: 1; stroke: currentColor; }
+.lb-bottom .btn.act.final.off .dot { background: transparent; border-color: var(--text); }
+.lb-bottom .btn.act.final.off .dot svg { opacity: 0; }
+.lb-top .cnt .dot { width: 16px; height: 16px; border-width: 1.5px; background: var(--accent); border-color: var(--accent); box-shadow: none; }
+.lb-top .cnt .dot svg { width: 10px; height: 10px; opacity: 1; }
 .lb-note { font-size: 12px; color: var(--faint); min-height: 16px; text-align: center; }
 .lb-note.err { color: var(--danger); }

@@ -65,9 +65,9 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
     }
   };
 
-  /** Copy the client's picked filenames (one per line) for use in an editor. */
+  /** Copy the client's final-pick filenames (one per line) for use in an editor. */
   const copyNames = async (s: ShareSummary) => {
-    const text = s.selections.join('\n');
+    const text = s.final.join('\n');
     try {
       await navigator.clipboard.writeText(text);
       setCopiedNamesId(s.id);
@@ -131,22 +131,22 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
                       <p className="mt-1.5 text-[11px] text-gray-500">
                         {s.kind === 'delivery'
                           ? <>{s.previewCount} photo{s.previewCount === 1 ? '' : 's'} &middot; client can download everything</>
-                          : <>{s.selectedCount} / {s.cap} selected &middot; {s.previewCount} preview{s.previewCount === 1 ? '' : 's'}</>}
+                          : <>{s.finalCount} / {s.cap} final &middot; {s.selectedCount} shortlisted &middot; {s.previewCount} preview{s.previewCount === 1 ? '' : 's'}</>}
                       </p>
 
-                      {s.phase !== 'proofing' && s.selections.length > 0 && (
+                      {s.phase !== 'proofing' && s.final.length > 0 && (
                         <div className="mt-2">
                           <button
                             type="button"
                             onClick={() => setOpenId(openId === s.id ? null : s.id)}
                             className="text-[11px] font-medium text-primary-400 transition hover:text-primary-300"
                           >
-                            {openId === s.id ? 'Hide selection' : `View selection (${s.selections.length})`}
+                            {openId === s.id ? 'Hide picks' : `View picks (${s.final.length})`}
                           </button>
                           {openId === s.id && (
                             <>
                               <div className="mt-2 grid grid-cols-4 gap-1.5">
-                                {s.selections.map((f) => (
+                                {s.final.map((f) => (
                                   <figure key={f} className="m-0 min-w-0">
                                     <AuthImage
                                       src={thumbUrl(`${s.albumPath}/Edited/${f}`)}
@@ -157,6 +157,23 @@ export function ShareManager({ onClose }: { onClose: () => void }) {
                                   </figure>
                                 ))}
                               </div>
+                              {s.selections.length > s.final.length && (
+                                <>
+                                  <p className="mb-1 mt-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                                    Also shortlisted &middot; {s.selections.length - s.final.length} &middot; not chosen
+                                  </p>
+                                  <div className="grid grid-cols-6 gap-1 opacity-60">
+                                    {s.selections.filter((f) => !s.final.includes(f)).map((f) => (
+                                      <AuthImage
+                                        key={f}
+                                        src={thumbUrl(`${s.albumPath}/Edited/${f}`)}
+                                        alt={f}
+                                        className="aspect-square overflow-hidden rounded bg-surface"
+                                      />
+                                    ))}
+                                  </div>
+                                </>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => copyNames(s)}

@@ -21,7 +21,10 @@ export interface ShareRecord {
   /** Preview pixel size per item, keyed by filename. Absent on records
    *  written before Phase 7; backfilled lazily from the preview files. */
   dims?: Record<string, { w: number; h: number }>;
-  selections: string[];     // client's picks (subset of items)
+  selections: string[];     // client's shortlist (subset of items; uncapped)
+  /** Client's final picks (subset of selections; capped). Absent on records
+   *  from before Phase 7b: read as [] while proofing, else as `selections`. */
+  final?: string[];
   createdAt: number;        // epoch ms
   submittedAt: number | null;
 }

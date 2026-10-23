@@ -83,3 +83,38 @@ SHARE_WHATS_NEXT=                 # after-submit copy; has a sensible default
 
 Owner-app push on submit (push is a separate phase), per-photo notes,
 light theme, share expiry/activity tracking.
+
+---
+
+## 7b — Shortlist, then choose the final set
+
+**Approved 2026-10-22.** Couples want to heart more than the cap, talk it
+over, then commit. The heart becomes an **uncapped shortlist**; the cap
+applies to a separate **final** set chosen in a dedicated step.
+
+Client flow (proofing kind only; delivery shares are unaffected):
+
+1. **Shortlisting** — same grid, heart = "Add to shortlist". No cap, no
+   progress bar. Footer: "20 shortlisted · You'll choose 15 of these to
+   send" + **Choose final 15**. Pill reads "Shortlist · 20".
+2. **Choose your final N** — full-screen step, shortlisted photos only.
+   Tick in the tile corner (same spot as the heart); chosen tiles get an
+   amber inset ring, unchosen dim to 55%. "12 of 15 chosen" progress bar,
+   Clear, back arrow. Lightbox in `final` mode: big **Choose / Chosen**
+   button. Footer: **Send 12 photos** (disabled at 0). Nothing under it.
+3. **Sent** — "Your 15 final picks are in", then "Your final picks · 15"
+   and a dimmed "Also on your shortlist · 5 · not being edited" section;
+   footer "Want any of the extras edited too? Just reply…".
+
+Both sets persist as the client goes (shortlist on heart, final on tick),
+so the couple can leave and come back.
+
+Data: `ShareRecord.final?: string[]` (subset of `selections`, which is now
+the shortlist). Cap enforcement moves from `/select` to `/final` and
+`/submit`. Old records: no `final` + phase `proofing` → empty final; no
+`final` + submitted/delivery → `final` reads as `selections` (the old
+behaviour, so existing shares deliver exactly what was picked).
+
+API: `POST /api/public/share/:slug/final { files }`. `SharePublicItem`
+gains `final`; `SharePublicState` gains `finalCount`; `ShareSummary` gains
+`final` and `finalCount`. Owner UI pill: "15 final · 20 shortlisted".

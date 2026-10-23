@@ -48,12 +48,20 @@ const thumb = await call(`${pub}/thumb/${encodeURIComponent(file)}`, { headers: 
 const prev = await call(`${pub}/preview/${encodeURIComponent(file)}`, { headers: h });
 console.log('THUMB    ', thumb.status, thumb.type, thumb.body.length, 'bytes; preview', prev.body.length, 'bytes');
 console.log('TRAVERSE ', (await call(`${pub}/thumb/..%2F..%2Fshares.json`, { headers: h })).status);
-const over = await call(`${pub}/select`, { method: 'POST', headers: h, body: JSON.stringify({ files: st.items.slice(0, 3).map((i) => i.file) }) });
+// Shortlist is uncapped (3 > cap 2 is fine); final picks are capped.
+const all = st.items.map((i) => i.file);
+const sel = await call(`${pub}/select`, { method: 'POST', headers: h, body: JSON.stringify({ files: all.slice(0, 3) }) });
+console.log('SHORTLIST', sel.status, j({ selectedCount: sel.body.data?.selectedCount, finalCount: sel.body.data?.finalCount }));
+const over = await call(`${pub}/final`, { method: 'POST', headers: h, body: JSON.stringify({ files: all.slice(0, 3) }) });
 console.log('OVER-CAP ', over.status, over.body.message);
-const sel = await call(`${pub}/select`, { method: 'POST', headers: h, body: JSON.stringify({ files: [file] }) });
-console.log('SELECT   ', sel.status, j({ selectedCount: sel.body.data?.selectedCount }));
+const early = await call(`${pub}/submit`, { method: 'POST', headers: h });
+console.log('NO-FINAL ', early.status, early.body.message);
+const fin = await call(`${pub}/final`, { method: 'POST', headers: h, body: JSON.stringify({ files: [file, 'not-shortlisted.jpg'] }) });
+console.log('FINAL    ', fin.status, j({ finalCount: fin.body.data?.finalCount, final: fin.body.data?.items.filter((i) => i.final).map((i) => i.file) }));
 const sub = await call(`${pub}/submit`, { method: 'POST', headers: h });
-console.log('SUBMIT   ', sub.status, j({ phase: sub.body.data?.phase, whatsNext: sub.body.data?.whatsNext?.slice(0, 30) }));
+console.log('SUBMIT   ', sub.status, j({ phase: sub.body.data?.phase, finalCount: sub.body.data?.finalCount, selectedCount: sub.body.data?.selectedCount }));
+const locked = await call(`${pub}/select`, { method: 'POST', headers: h, body: JSON.stringify({ files: all }) });
+console.log('LOCKED2  ', locked.status, locked.body.message);
 
 // Owner releases delivery; client sees size and can download.
 console.log('DELIVER  ', (await call(`/api/gallery/shares/${id}/delivery`, { method: 'POST', headers: auth })).status);
@@ -61,6 +69,8 @@ const del = await call(`${pub}/list`, { headers: h });
 console.log('DELIVERY ', del.status, j({ phase: del.body.data?.phase, downloadBytes: del.body.data?.downloadBytes }));
 const dl = await call(`${pub}/download/${encodeURIComponent(file)}`, { headers: h });
 console.log('DOWNLOAD ', dl.status, dl.type, dl.body.length, 'bytes');
+// Shortlisted-but-not-final must not be downloadable.
+console.log('NOT-FINAL', (await call(`${pub}/download/${encodeURIComponent(all[1])}`, { headers: h })).status);
 
 // Clean up.
 console.log('REVOKE   ', (await call(`/api/gallery/shares/${id}`, { method: 'DELETE', headers: auth })).status);

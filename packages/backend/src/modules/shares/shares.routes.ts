@@ -37,6 +37,7 @@ pub.get('/:slug/list', validSlug, requireShareAuth, sharesController.state);
 pub.get('/:slug/thumb/:file', validSlug, requireShareAuth, sharesController.thumb);
 pub.get('/:slug/preview/:file', validSlug, requireShareAuth, sharesController.preview);
 pub.post('/:slug/select', validSlug, requireShareAuth, sharesController.select);
+pub.post('/:slug/final', validSlug, requireShareAuth, sharesController.final);
 pub.post('/:slug/submit', validSlug, requireShareAuth, sharesController.submit);
 pub.get('/:slug/download/:file', validSlug, requireShareAuth, sharesController.download);
 pub.get('/:slug/download-all', validSlug, requireShareAuth, sharesController.downloadAll);

@@ -1,6 +1,7 @@
 /* Client share page. Vanilla JS, no build step, no dependencies. Driven by the
    /api/public/share/:slug endpoints; the slug comes from <body data-slug>.
-   Views: gate → proofing (favourites) → submitted → delivery. */
+   Views: gate → shortlist (hearts, uncapped) → final (ticks, capped) →
+   submitted → delivery. */
 (function () {
   'use strict';
 
@@ -8,9 +9,12 @@
   const API = '/api/public/share/' + encodeURIComponent(SLUG);
   const app = document.getElementById('app');
   const COARSE = window.matchMedia('(pointer: coarse)').matches;
+  const TAP = COARSE ? 'tap' : 'click';
 
   let state = null;        // SharePublicState from the server
-  const favs = new Set();  // client's favourites (filenames)
+  const favs = new Set();  // shortlist (filenames)
+  const fin = new Set();   // final picks (subset of favs)
+  let view = 'shortlist';  // 'shortlist' | 'final' (within the proofing phase)
   let filter = 'all';      // 'all' | 'favs'
   let grid = null;         // active Grid
 
@@ -18,9 +22,11 @@
   const HEART = 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z';
   const ICON = {
     heart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + HEART + '"/></svg>',
+    tickDot: '<span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></span>',
     eye: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
     eyeOff: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3l18 18M10.6 10.6A3 3 0 0 0 13.4 13.4M9.9 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.3 6.3A17.3 17.3 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 4.2-.9"/></svg>',
     close: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    back: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
     prev: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
     next: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
     down: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"/></svg>',
@@ -63,20 +69,33 @@
   document.addEventListener('contextmenu', (ev) => { if (ev.target && ev.target.tagName === 'IMG') ev.preventDefault(); });
   document.addEventListener('dragstart', (ev) => { if (ev.target && ev.target.tagName === 'IMG') ev.preventDefault(); });
 
-  function syncFavs() {
+  function syncSets() {
     favs.clear();
-    state.items.forEach((it) => { if (it.selected) favs.add(it.file); });
+    fin.clear();
+    state.items.forEach((it) => {
+      if (it.selected) favs.add(it.file);
+      if (it.final) fin.add(it.file);
+    });
   }
 
   function route() {
     Lightbox.close();
+    if (grid) grid.destroy();
     grid = null;
     filter = 'all';
     if (!state) renderGate();
     else if (state.phase === 'delivery') renderDelivery();
     else if (state.phase === 'submitted') renderSubmitted();
-    else renderProofing();
+    else if (view === 'final') renderFinal();
+    else renderShortlist();
     window.scrollTo(0, 0);
+  }
+
+  function setStatus(msg, isErr) {
+    const s = document.getElementById('status');
+    if (!s) return;
+    s.textContent = msg || '';
+    s.className = 'status' + (isErr ? ' err' : '');
   }
 
   // ── Gate ──────────────────────────────────────────────────────────────────
@@ -121,7 +140,7 @@
       post('/auth', { password: pw.value })
         .then((res) => {
           if (res.unauth) throw new Error('Incorrect password');
-          state = res.data; syncFavs(); route();
+          state = res.data; syncSets(); route();
         })
         .catch((e) => { err.textContent = e.message; go.disabled = false; pw.select(); });
     };
@@ -131,7 +150,8 @@
   // ── Justified grid ────────────────────────────────────────────────────────
   // Rows of a target height, each scaled to fill the width exactly so every
   // photo shows uncropped. Tiles are created once and moved between rows on
-  // relayout, so images never reload.
+  // relayout, so images never reload. Options: heart (shortlist toggle),
+  // tick (final-pick toggle), save (delivery), onOpen, isOn(file).
   function Grid(container, items, opts) {
     this.container = container;
     this.items = items;
@@ -150,11 +170,13 @@
 
   Grid.prototype.makeTile = function (it, index) {
     const o = this.opts;
+    const on = o.isOn ? o.isOn(it.file) : false;
     const tile = el(
-      '<div class="tile' + (favs.has(it.file) ? ' on' : '') + '" data-file="' + esc(it.file) + '">'
+      '<div class="tile' + (on ? ' on' : '') + (o.tick ? ' pick' : '') + '" data-file="' + esc(it.file) + '">'
       + '<img alt="" loading="lazy" decoding="async"/>'
       + '<button type="button" class="open" aria-label="Open photo ' + (index + 1) + '"></button>'
-      + (o.heart ? '<button type="button" class="heart" aria-label="Favourite" aria-pressed="' + favs.has(it.file) + '">' + ICON.heart + '</button>' : '')
+      + (o.heart ? '<button type="button" class="mark heart" aria-label="Add to shortlist" aria-pressed="' + on + '">' + ICON.heart + '</button>' : '')
+      + (o.tick ? '<button type="button" class="mark tickbtn" aria-label="Choose" aria-pressed="' + on + '">' + ICON.tickDot + '</button>' : '')
       + (o.save ? '<button type="button" class="save" aria-label="Save photo">' + ICON.down + 'Save</button>' : '')
       + '</div>',
     );
@@ -162,8 +184,8 @@
     img.onload = () => img.classList.add('ok');
     img.src = thumbUrl(it.file);
     tile.querySelector('.open').onclick = () => o.onOpen && o.onOpen(it.file);
-    const heart = tile.querySelector('.heart');
-    if (heart) heart.onclick = (ev) => { ev.stopPropagation(); toggleFav(it.file); };
+    const mark = tile.querySelector('.mark');
+    if (mark) mark.onclick = (ev) => { ev.stopPropagation(); o.onToggle && o.onToggle(it.file); };
     const save = tile.querySelector('.save');
     if (save) save.onclick = (ev) => { ev.stopPropagation(); saveFile(it.file, save); };
     return tile;
@@ -215,7 +237,6 @@
       let h = Math.min(target, natural);
       if (row.length === 1) h = Math.min(h, (W * 0.6) / sum);
       if (h < natural) {
-        // Shrunk row: size tiles by aspect, leave the remainder empty.
         const r = document.createElement('div');
         r.className = 'row';
         row.forEach((it) => {
@@ -237,26 +258,54 @@
     const t = this.tiles.get(file);
     if (!t) return;
     t.classList.toggle('on', on);
-    const heart = t.querySelector('.heart');
-    if (heart) heart.setAttribute('aria-pressed', String(on));
+    const mark = t.querySelector('.mark');
+    if (mark) mark.setAttribute('aria-pressed', String(on));
   };
 
   Grid.prototype.destroy = function () { this.ro.disconnect(); };
 
   // ── Shared chrome ─────────────────────────────────────────────────────────
-  function header(sub, toolsHtml) {
-    return '<div class="head">'
-      + '<div class="ident"><div class="brand"><span class="brand-mark" aria-hidden="true"></span>' + esc(state.brandName) + '</div>'
-      + '<h1>' + esc(state.albumName) + '</h1>'
+  function header(sub, toolsHtml, opts) {
+    const o = opts || {};
+    return '<div class="head' + (o.back ? ' with-back' : '') + '">'
+      + (o.back ? '<button type="button" class="icon-btn back" aria-label="Back to the gallery">' + ICON.back + '</button>' : '')
+      + '<div class="ident">'
+      + (o.eyebrow !== undefined
+        ? '<span class="eyebrow">' + o.eyebrow + '</span>'
+        : '<div class="brand"><span class="brand-mark" aria-hidden="true"></span>' + esc(state.brandName) + '</div>')
+      + '<h1>' + (o.title || esc(state.albumName)) + '</h1>'
       + '<span class="sub">' + sub + '</span></div>'
       + (toolsHtml || '')
       + '</div>';
   }
 
+  /** Debounced persist of a set to an endpoint; one timer per endpoint. */
+  const timers = {};
+  const SAVING = 'Saving…';
+  function persist(endpoint, set) {
+    setStatus(SAVING);
+    clearTimeout(timers[endpoint]);
+    timers[endpoint] = setTimeout(() => {
+      post(endpoint, { files: Array.from(set) })
+        .then((res) => {
+          if (res.data) state = res.data;
+          // Only clear our own "Saving…"; a cap warning shown since stays.
+          const s = document.getElementById('status');
+          if (s && s.textContent === SAVING) setStatus('');
+        })
+        .catch((e) => setStatus(e.message, true));
+    }, 250);
+  }
+  function flushPersist(endpoint, set) {
+    clearTimeout(timers[endpoint]);
+    return post(endpoint, { files: Array.from(set) });
+  }
+
+  // ── Shortlist (step 1) ────────────────────────────────────────────────────
   function filterPills() {
     return '<div class="tools" role="group" aria-label="Show">'
       + '<button type="button" class="pill' + (filter === 'all' ? ' on' : '') + '" data-filter="all">All · ' + state.items.length + '</button>'
-      + '<button type="button" class="pill' + (filter === 'favs' ? ' on' : '') + '" data-filter="favs">' + ICON.heart.replace('<svg', '<svg width="14" height="14" style="fill:var(--accent)"') + ' Favourites · <span data-favcount>' + favs.size + '</span></button>'
+      + '<button type="button" class="pill' + (filter === 'favs' ? ' on' : '') + '" data-filter="favs">' + ICON.heart.replace('<svg', '<svg width="14" height="14" style="fill:var(--accent)"') + ' Shortlist · <span data-favcount>' + favs.size + '</span></button>'
       + '</div>';
   }
 
@@ -282,84 +331,146 @@
     if (empty) empty.hidden = items.length > 0;
   }
 
-  function progressHtml() {
-    return '<div class="prog"><span class="lbl"><span data-favcount>' + favs.size + '</span> of ' + state.cap + ' favourites</span>'
-      + '<div class="bar"><span data-favbar></span></div></div>'
-      + '<button type="button" class="btn primary" data-submit>Send my picks</button>';
+  function shortlistCtaHtml() {
+    return '<div class="prog"><span class="lbl"><span data-favcount>' + favs.size + '</span> shortlisted</span>'
+      + '<span class="sub2">You’ll choose ' + state.cap + ' of these to send</span></div>'
+      + '<button type="button" class="btn primary" data-next>Choose final ' + state.cap + '</button>';
   }
 
-  /** Repaint everything that depends on the favourites set. */
-  function updateCounts() {
+  function updateShortlistCounts() {
     const n = favs.size;
     document.querySelectorAll('[data-favcount]').forEach((x) => { x.textContent = n; });
-    document.querySelectorAll('[data-favbar]').forEach((x) => { x.style.width = Math.min(100, Math.round((n / Math.max(1, state.cap)) * 100)) + '%'; });
-    document.querySelectorAll('[data-submit]').forEach((b) => { b.disabled = n === 0; });
+    document.querySelectorAll('[data-next]').forEach((b) => { b.disabled = n === 0; });
     Lightbox.sync();
   }
 
-  // ── Proofing ──────────────────────────────────────────────────────────────
-  function renderProofing() {
-    const verb = COARSE ? 'tap' : 'click';
-    const sub = plural(state.items.length, 'photo') + ' · ' + verb + ' a photo to view it, ' + verb + ' the heart to choose it';
+  function renderShortlist() {
+    const sub = plural(state.items.length, 'photo') + ' · heart everything you like — you’ll choose your final ' + state.cap + ' at the end';
     app.replaceChildren(el(
       '<div class="shell">'
-      + header(sub, filterPills() + '<div class="progress">' + progressHtml() + '</div>')
-      + '<div class="main"><div class="grid" id="grid"></div><p class="empty" id="empty" hidden>No favourites yet — tap the heart on the photos you love.</p>'
+      + header(sub, filterPills() + '<div class="progress">' + shortlistCtaHtml() + '</div>')
+      + '<div class="main"><div class="grid" id="grid"></div><p class="empty" id="empty" hidden>Nothing shortlisted yet — ' + TAP + ' the heart on the photos you love.</p>'
       + '<p id="status" class="status" aria-live="polite"></p></div>'
-      + '<div class="foot-bar">' + progressHtml() + '</div>'
+      + '<div class="foot-bar">' + shortlistCtaHtml() + '</div>'
       + '</div>',
     ));
     bindFilter(app);
     grid = new Grid(document.getElementById('grid'), state.items, {
       heart: true,
+      isOn: (f) => favs.has(f),
+      onToggle: toggleFav,
       onOpen: (file) => Lightbox.open(visibleItems().map((it) => it.file), file, 'select'),
     });
-    document.querySelectorAll('[data-submit]').forEach((b) => { b.onclick = confirmSubmit; });
-    updateCounts();
+    document.querySelectorAll('[data-next]').forEach((b) => { b.onclick = goFinal; });
+    updateShortlistCounts();
   }
 
-  function setStatus(msg, isErr) {
-    const s = document.getElementById('status');
-    if (!s) return;
-    s.textContent = msg || '';
-    s.className = 'status' + (isErr ? ' err' : '');
-  }
-
-  let saveTimer = 0;
-  /** Toggle one favourite and persist. Returns false if the cap blocked it. */
+  /** Toggle one shortlist entry and persist. Uncapped; always succeeds. */
   function toggleFav(file) {
     if (!state || state.phase !== 'proofing') return false;
-    if (favs.has(file)) {
-      favs.delete(file);
-    } else {
-      if (favs.size >= state.cap) {
-        setStatus('You can choose up to ' + plural(state.cap, 'photo') + '.', true);
-        return false;
-      }
-      favs.add(file);
-    }
+    if (favs.has(file)) { favs.delete(file); fin.delete(file); }
+    else favs.add(file);
     if (grid) grid.setOn(file, favs.has(file));
     if (filter === 'favs') applyFilter();
-    updateCounts();
-    setStatus('Saving…');
-    // Coalesce rapid taps into one request; the server stores the whole set.
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      post('/select', { files: Array.from(favs) })
-        .then((res) => { if (res.data) state = res.data; setStatus(''); })
-        .catch((e) => setStatus(e.message, true));
-    }, 250);
+    updateShortlistCounts();
+    persist('/select', favs);
     return true;
   }
 
+  function goFinal() {
+    if (favs.size === 0) return;
+    // Make sure the shortlist is saved before the step that depends on it.
+    flushPersist('/select', favs)
+      .then((res) => { if (res.data) state = res.data; view = 'final'; route(); })
+      .catch((e) => setStatus(e.message, true));
+  }
+
+  // ── Final picks (step 2) ──────────────────────────────────────────────────
+  function finalProgHtml() {
+    return '<div class="prog"><span class="lbl"><span data-fincount>' + fin.size + '</span> of ' + state.cap + ' chosen</span>'
+      + '<div class="bar"><span data-finbar></span></div></div>';
+  }
+  function finalCtaHtml() {
+    return finalProgHtml() + '<button type="button" class="btn primary" data-submit>Send</button>';
+  }
+
+  function updateFinalCounts() {
+    const n = fin.size;
+    document.querySelectorAll('[data-fincount]').forEach((x) => { x.textContent = n; });
+    document.querySelectorAll('[data-finbar]').forEach((x) => { x.style.width = Math.min(100, Math.round((n / Math.max(1, state.cap)) * 100)) + '%'; });
+    document.querySelectorAll('[data-submit]').forEach((b) => {
+      b.disabled = n === 0;
+      b.textContent = n === 0 ? 'Send' : 'Send ' + plural(n, 'photo');
+    });
+    Lightbox.sync();
+  }
+
+  function renderFinal() {
+    const short = state.items.filter((it) => favs.has(it.file));
+    const sub = 'From your ' + short.length + ' shortlisted. ' + (COARSE ? 'Tap' : 'Click') + ' a photo to view it, ' + TAP + ' the circle to choose it.';
+    app.replaceChildren(el(
+      '<div class="shell">'
+      + header(sub,
+        '<button type="button" class="pill wide-only" data-clear>Clear</button><div class="progress">' + finalCtaHtml() + '</div>',
+        { back: true, eyebrow: 'Step 2 of 2 · ' + esc(state.albumName), title: 'Choose your final ' + state.cap })
+      + '<div class="main"><div class="final-prog phone-only">' + finalProgHtml() + '<button type="button" class="pill" data-clear>Clear</button></div>'
+      + '<p id="status" class="status above" aria-live="polite"></p>'
+      + '<div class="grid" id="grid"></div></div>'
+      + '<div class="foot-bar"><button type="button" class="btn primary block" data-submit>Send</button></div>'
+      + '</div>',
+    ));
+    app.querySelector('.back').onclick = goBack;
+    app.querySelectorAll('[data-clear]').forEach((b) => { b.onclick = clearFinal; });
+    grid = new Grid(document.getElementById('grid'), short, {
+      tick: true,
+      isOn: (f) => fin.has(f),
+      onToggle: toggleFinal,
+      onOpen: (file) => Lightbox.open(short.map((it) => it.file), file, 'final'),
+    });
+    document.querySelectorAll('[data-submit]').forEach((b) => { b.onclick = confirmSubmit; });
+    updateFinalCounts();
+  }
+
+  function goBack() {
+    flushPersist('/final', fin).catch(() => {});
+    view = 'shortlist';
+    route();
+  }
+
+  /** Toggle one final pick and persist. Returns false if the cap blocked it. */
+  function toggleFinal(file) {
+    if (!state || state.phase !== 'proofing' || !favs.has(file)) return false;
+    if (fin.has(file)) {
+      fin.delete(file);
+    } else {
+      if (fin.size >= state.cap) {
+        setStatus('You can choose up to ' + plural(state.cap, 'photo') + '. Un-choose one to swap it.', true);
+        return false;
+      }
+      fin.add(file);
+    }
+    if (grid) grid.setOn(file, fin.has(file));
+    updateFinalCounts();
+    persist('/final', fin);
+    return true;
+  }
+
+  function clearFinal() {
+    if (fin.size === 0) return;
+    fin.forEach((f) => grid && grid.setOn(f, false));
+    fin.clear();
+    updateFinalCounts();
+    persist('/final', fin);
+  }
+
   function confirmSubmit() {
-    const n = favs.size;
+    const n = fin.size;
     if (n === 0) return;
-    const left = state.cap - n;
+    const extra = favs.size - n;
     const overlay = el(
       '<div class="overlay" role="dialog" aria-modal="true" aria-labelledby="mTitle"><div class="modal">'
-      + '<h2 id="mTitle">Send your ' + plural(n, 'favourite') + '?</h2>'
-      + '<p class="muted">' + (left > 0 ? 'You can still choose up to ' + left + ' more. ' : '') + 'Once sent, your choice is final and can’t be changed.</p>'
+      + '<h2 id="mTitle">Send your ' + plural(n, 'final pick') + '?</h2>'
+      + '<p class="muted">' + (extra > 0 ? 'The other ' + plural(extra, 'photo') + ' on your shortlist won’t be edited. ' : '') + 'Once sent, your choice is final and can’t be changed.</p>'
       + '<div class="actions"><button type="button" class="btn" id="mCancel">Keep choosing</button><button type="button" class="btn primary" id="mOk">Send</button></div>'
       + '</div></div>',
     );
@@ -372,25 +483,27 @@
   }
 
   function doSubmit() {
-    clearTimeout(saveTimer);
     document.querySelectorAll('[data-submit]').forEach((b) => { b.disabled = true; });
     setStatus('Sending…');
-    post('/select', { files: Array.from(favs) })
+    flushPersist('/final', fin)
       .then(() => post('/submit'))
-      .then((res) => { state = res.data; syncFavs(); route(); })
-      .catch((e) => { setStatus(e.message, true); updateCounts(); });
+      .then((res) => { state = res.data; syncSets(); view = 'shortlist'; route(); })
+      .catch((e) => { setStatus(e.message, true); updateFinalCounts(); });
   }
 
   // ── Submitted ─────────────────────────────────────────────────────────────
   function renderSubmitted() {
-    const picked = state.items.filter((it) => it.selected);
+    const picked = state.items.filter((it) => it.final);
+    const extras = state.items.filter((it) => it.selected && !it.final);
     app.replaceChildren(el(
       '<div class="shell">'
-      + header('Your favourites have been sent')
+      + header('Your final picks have been sent')
       + '<div class="main">'
-      + '<div class="info"><div class="title"><span class="tick">' + ICON.tick + '</span>Your ' + plural(picked.length, 'favourite') + ' are in</div>'
+      + '<div class="info"><div class="title"><span class="tick">' + ICON.tick + '</span>Your ' + plural(picked.length, 'final pick') + ' are in</div>'
       + '<p class="muted">' + esc(state.whatsNext) + '</p></div>'
-      + (picked.length ? '<div class="sec"><strong>Your favourites</strong><span>' + picked.length + '</span></div><div class="grid" id="grid"></div>' : '')
+      + (picked.length ? '<div class="sec"><strong>Your final picks</strong><span>' + picked.length + '</span></div><div class="grid" id="grid"></div>' : '')
+      + (extras.length ? '<div class="sec dim"><strong>Also on your shortlist</strong><span>' + extras.length + ' · not being edited</span></div><div class="grid dim" id="grid2"></div>'
+        + '<p class="hint" style="margin-top:18px">Want any of the extras edited too? Just reply to the message I sent you.</p>' : '')
       + '</div></div>',
     ));
     if (picked.length) {
@@ -398,13 +511,19 @@
         onOpen: (file) => Lightbox.open(picked.map((it) => it.file), file, 'view'),
       });
     }
+    if (extras.length) {
+      // Second grid: not tracked as `grid` (no relayout hooks needed beyond its own observer).
+      new Grid(document.getElementById('grid2'), extras, {
+        onOpen: (file) => Lightbox.open(extras.map((it) => it.file), file, 'view'),
+      });
+    }
   }
 
   // ── Delivery ──────────────────────────────────────────────────────────────
   function renderDelivery() {
-    // A download-everything share has no selections: every photo is
-    // downloadable. A proofing share delivers only the client's favourites.
-    const files = state.kind === 'delivery' ? state.items : state.items.filter((it) => it.selected);
+    // A download-everything share has no picks: every photo is downloadable.
+    // A proofing share delivers only the client's final picks.
+    const files = state.kind === 'delivery' ? state.items : state.items.filter((it) => it.final);
     const size = fmtBytes(state.downloadBytes);
     const sub = 'Your final photos are ready · ' + plural(files.length, 'photo') + ' · full resolution';
     const dl = '<a class="btn primary" href="' + API + '/download-all" download>' + ICON.down + 'Download all (' + files.length + (size ? ' · ' + size : '') + ')</a>';
@@ -415,11 +534,10 @@
       + '<div class="dl-wrap phone-only">' + dl + '<span class="hint">One zip file' + (COARSE ? ' — on a phone, Wi‑Fi is a good idea' : '') + '. Or save photos one at a time below.</span></div>'
       + '<div class="sec"><strong>Your photos</strong><span>' + (COARSE ? 'Tap a photo to view · Save keeps it on your phone' : 'Click a photo to view') + '</span></div>'
       + '<div class="grid" id="grid"></div>'
+      + '<p id="status" class="status" aria-live="polite"></p>'
       + '<p class="hint" style="margin-top:18px">Thank you for choosing ' + esc(state.brandName) + '</p>'
       + '</div></div>',
     ));
-    // The header copy of the button shows on wide screens (.progress), the
-    // in-body copy on phones (.phone-only) — see page.css.
     grid = new Grid(document.getElementById('grid'), files, {
       save: true,
       onOpen: (file) => Lightbox.open(files.map((it) => it.file), file, 'download'),
@@ -468,9 +586,10 @@
   // ── Lightbox ──────────────────────────────────────────────────────────────
   // Full-screen preview with swipe/arrow/keyboard navigation, prev/next
   // preloading, double-tap zoom, and the back gesture closing it. Modes:
-  // 'select' (heart button), 'view' (read-only), 'download' (Save button).
+  // 'select' (shortlist heart), 'final' (choose tick), 'view' (read-only),
+  // 'download' (Save button).
   const Lightbox = (function () {
-    let lb = null; // { files, idx, mode, el, img, zoomed }
+    let lb = null; // { files, idx, mode, el, img, zoomed, pushed }
     let viaHistory = false;
 
     function preload(i) {
@@ -491,16 +610,25 @@
         preload(lb.idx - 1);
       }
       lb.el.querySelector('.pos').textContent = (lb.idx + 1) + ' / ' + lb.files.length;
-      const cnt = lb.el.querySelector('.cnt span');
-      if (cnt) cnt.textContent = favs.size + ' of ' + state.cap;
-      const fav = lb.el.querySelector('.btn.fav');
-      if (fav) {
+      const cnt = lb.el.querySelector('.cnt .lbl');
+      if (cnt) cnt.textContent = lb.mode === 'final' ? fin.size + ' of ' + state.cap : favs.size + ' shortlisted';
+      const act = lb.el.querySelector('.btn.act');
+      const note = lb.el.querySelector('.lb-note');
+      if (act && lb.mode === 'select') {
         const on = favs.has(file);
-        fav.classList.toggle('off', !on);
-        fav.setAttribute('aria-pressed', String(on));
-        fav.querySelector('span').textContent = on ? 'Favourited' : 'Add to favourites';
-        lb.el.querySelector('.lb-note').textContent = on ? 'Tap again to remove from your favourites' : '';
-        lb.el.querySelector('.lb-note').classList.remove('err');
+        act.classList.toggle('off', !on);
+        act.setAttribute('aria-pressed', String(on));
+        act.querySelector('.lbl').textContent = on ? 'Shortlisted' : 'Add to shortlist';
+        note.textContent = on ? 'Tap again to remove it from your shortlist' : '';
+        note.classList.remove('err');
+      }
+      if (act && lb.mode === 'final') {
+        const on = fin.has(file);
+        act.classList.toggle('off', !on);
+        act.setAttribute('aria-pressed', String(on));
+        act.querySelector('.lbl').textContent = on ? 'Chosen' : 'Choose this photo';
+        note.textContent = on ? 'Tap again to un-choose it' : '';
+        note.classList.remove('err');
       }
     }
 
@@ -550,11 +678,13 @@
     function open(files, file, mode) {
       close();
       const idx = Math.max(0, files.indexOf(file));
+      const pickable = mode === 'select' || mode === 'final';
+      const icon = mode === 'final' ? ICON.tickDot : ICON.heart;
       const node = el(
         '<div class="lb" role="dialog" aria-modal="true" aria-label="Photo viewer">'
         + '<div class="lb-top"><button type="button" class="icon-btn x" aria-label="Close">' + ICON.close + '</button>'
         + '<span class="pos"></span>'
-        + (mode === 'select' ? '<span class="cnt">' + ICON.heart + '<span></span></span>' : '')
+        + (pickable ? '<span class="cnt">' + icon + '<span class="lbl"></span></span>' : '')
         + '</div>'
         + '<div class="lb-stage"><img class="lb-img loading" alt=""/>'
         + '<button type="button" class="icon-btn lb-nav prev" aria-label="Previous photo">' + ICON.prev + '</button>'
@@ -562,7 +692,7 @@
         + '<span class="lb-tip">' + (COARSE ? 'Swipe to move between photos · double-tap to zoom' : 'Arrow keys to move · double-click to zoom') + '</span>'
         + '</div>'
         + '<div class="lb-bottom">'
-        + (mode === 'select' ? '<button type="button" class="btn primary fav" aria-pressed="false">' + ICON.heart + '<span></span></button><p class="lb-note"></p>' : '')
+        + (pickable ? '<button type="button" class="btn primary act ' + mode + '" aria-pressed="false">' + icon + '<span class="lbl"></span></button><p class="lb-note"></p>' : '')
         + (mode === 'download' ? '<button type="button" class="btn primary dl">' + ICON.down + 'Save this photo</button>' : '')
         + '</div></div>',
       );
@@ -579,12 +709,15 @@
       stage.onclick = (ev) => { if (ev.target === stage) close(); };
       lb.img.ondblclick = (ev) => zoomAt(ev.clientX, ev.clientY);
 
-      const fav = node.querySelector('.btn.fav');
-      if (fav) {
-        fav.onclick = () => {
-          const ok = toggleFav(lb.files[lb.idx]);
-          const note = node.querySelector('.lb-note');
-          if (!ok) { note.textContent = 'You can choose up to ' + plural(state.cap, 'photo') + '.'; note.classList.add('err'); }
+      const act = node.querySelector('.btn.act');
+      if (act) {
+        act.onclick = () => {
+          const ok = mode === 'final' ? toggleFinal(lb.files[lb.idx]) : toggleFav(lb.files[lb.idx]);
+          if (!ok && mode === 'final') {
+            const note = node.querySelector('.lb-note');
+            note.textContent = 'You can choose up to ' + plural(state.cap, 'photo') + '. Un-choose one to swap it.';
+            note.classList.add('err');
+          }
         };
       }
       const dl = node.querySelector('.btn.dl');
@@ -623,6 +756,6 @@
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   api('/list', {})
-    .then((res) => { state = res.unauth ? null : res.data; if (state) syncFavs(); route(); })
+    .then((res) => { state = res.unauth ? null : res.data; if (state) syncSets(); route(); })
     .catch(() => { state = null; route(); });
 })();

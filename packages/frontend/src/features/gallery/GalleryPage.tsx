@@ -737,7 +737,7 @@ export function GalleryPage() {
                         className={`rounded-md px-2 py-1 text-[11px] font-medium transition hover:brightness-125 ${SHARE_PILL[s.phase].cls}`}
                       >
                         {SHARE_PILL[s.phase].label}
-                        {s.phase !== 'delivery' && ` \u00b7 ${s.selectedCount}/${s.cap}`}
+                        {s.phase !== 'delivery' && ` \u00b7 ${s.finalCount}/${s.cap} final \u00b7 ${s.selectedCount} shortlisted`}
                       </button>
                     ))}
                   </div>

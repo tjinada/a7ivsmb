@@ -33,6 +33,32 @@ function kindOf(rec: ShareRecord): ShareKind {
   return rec.kind ?? 'proofing';
 }
 
+/** The client's final picks. Records from before 7b have no `final`: while
+ *  still proofing that means nothing chosen yet; once submitted it means the
+ *  old single-tier selection, which IS the final set. */
+function finalOf(rec: ShareRecord): string[] {
+  if (rec.final) return rec.final;
+  return rec.phase === 'proofing' ? [] : rec.selections;
+}
+
+/** Files the client may download once delivery is released. */
+function deliverable(rec: ShareRecord): string[] {
+  return kindOf(rec) === 'delivery' ? rec.items : finalOf(rec);
+}
+
+/** Keep only known, unique filenames, in the order given. */
+function dedupeKnown(files: unknown, known: Set<string>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  if (!Array.isArray(files)) return out;
+  for (const f of files) {
+    if (typeof f !== 'string' || !known.has(f) || seen.has(f)) continue;
+    seen.add(f);
+    out.push(f);
+  }
+  return out;
+}
+
 /** Absolute path to a share's preview folder on disk. */
 function previewsDirFor(id: string): string {
   return path.join(config.dataDir, 'shares', id, 'previews');
@@ -216,6 +242,8 @@ function toSummary(rec: ShareRecord): ShareSummary {
     previewCount: rec.items.length,
     selectedCount: rec.selections.length,
     selections: [...rec.selections],
+    finalCount: finalOf(rec).length,
+    final: [...finalOf(rec)],
     url: publicUrl(rec.slug),
     createdAt: rec.createdAt,
     submittedAt: rec.submittedAt,
@@ -229,6 +257,18 @@ function requireBySlug(slug: string): ShareRecord {
   return rec;
 }
 
+/** A proofing-kind share still in the proofing phase, or the right 4xx. */
+function requireProofing(slug: string): ShareRecord {
+  const rec = requireBySlug(slug);
+  if (kindOf(rec) === 'delivery') {
+    throw new AppError('This gallery does not use selections', 409);
+  }
+  if (rec.phase !== 'proofing') {
+    throw new AppError('This selection has already been submitted', 409);
+  }
+  return rec;
+}
+
 /** Turn a rendered list into the record's dims map. */
 function dimsOf(rendered: Rendered[]): Record<string, Dims> {
   return Object.fromEntries(rendered.map((r) => [r.name, r.dims]));
@@ -237,10 +277,12 @@ function dimsOf(rendered: Rendered[]): Record<string, Dims> {
 /** Build the client-facing state for a share (no secrets, this share only). */
 function toPublicState(rec: ShareRecord, downloadBytes?: number): SharePublicState {
   const picked = new Set(rec.selections);
+  const chosen = new Set(finalOf(rec));
   const dims = rec.dims ?? {};
   const items: SharePublicItem[] = rec.items.map((file) => ({
     file,
     selected: picked.has(file),
+    final: chosen.has(file),
     w: dims[file]?.w ?? 0,
     h: dims[file]?.h ?? 0,
   }));
@@ -252,6 +294,7 @@ function toPublicState(rec: ShareRecord, downloadBytes?: number): SharePublicSta
     phase: rec.phase,
     cap: rec.cap,
     selectedCount: rec.selections.length,
+    finalCount: finalOf(rec).length,
     items,
     ...(downloadBytes !== undefined ? { downloadBytes } : {}),
   };
@@ -280,7 +323,7 @@ async function ensureDims(rec: ShareRecord): Promise<ShareRecord> {
 /** Sum the sizes of the originals the client may download (delivery phase). */
 async function downloadBytesFor(rec: ShareRecord): Promise<number> {
   const editedDir = path.join(safeAlbumDir(rec.albumPath), EDITED_DIR);
-  const wanted = kindOf(rec) === 'delivery' ? rec.items : rec.selections;
+  const wanted = deliverable(rec);
   let total = 0;
   for (const file of wanted) {
     const stat = await fs.stat(path.join(editedDir, file)).catch(() => null);
@@ -381,6 +424,7 @@ export const sharesService = {
       items,
       dims: dimsOf(rendered),
       selections: rec.selections.filter((f) => keep.has(f)),
+      ...(rec.final ? { final: rec.final.filter((f) => keep.has(f)) } : {}),
     };
     await putShare(next);
     return toSummary(next);
@@ -411,46 +455,49 @@ export const sharesService = {
     return publicStateFor(requireBySlug(slug));
   },
 
-  /** Replace the client's selection set. Proofing only; cap enforced. */
+  /** Replace the client's shortlist. Proofing only; uncapped. Final picks
+   *  that drop off the shortlist are pruned with it. */
   async setSelections(slug: string, files: string[]): Promise<SharePublicState> {
     await loadShares();
-    const rec = requireBySlug(slug);
-    if (kindOf(rec) === 'delivery') {
-      throw new AppError('This gallery does not use selections', 409);
-    }
-    if (rec.phase !== 'proofing') {
-      throw new AppError('This selection has already been submitted', 409);
-    }
-    const known = new Set(rec.items);
-    const picked: string[] = [];
-    const seen = new Set<string>();
-    for (const f of files) {
-      if (typeof f !== 'string' || !known.has(f) || seen.has(f)) continue;
-      seen.add(f);
-      picked.push(f);
-    }
-    if (picked.length > rec.cap) {
-      throw new AppError(`You can select at most ${rec.cap} photo${rec.cap === 1 ? '' : 's'}`, 400);
-    }
-    const next: ShareRecord = { ...rec, selections: picked };
+    const rec = requireProofing(slug);
+    const picked = dedupeKnown(files, new Set(rec.items));
+    const keep = new Set(picked);
+    const next: ShareRecord = {
+      ...rec,
+      selections: picked,
+      final: finalOf(rec).filter((f) => keep.has(f)),
+    };
     await putShare(next);
     return publicStateFor(next);
   },
 
-  /** Lock the client's picks. Proofing -> submitted; needs at least one pick. */
+  /** Replace the client's final picks. Proofing only; must be a subset of
+   *  the shortlist and within the cap. */
+  async setFinal(slug: string, files: string[]): Promise<SharePublicState> {
+    await loadShares();
+    const rec = requireProofing(slug);
+    const chosen = dedupeKnown(files, new Set(rec.selections));
+    if (chosen.length > rec.cap) {
+      throw new AppError(`You can choose at most ${rec.cap} photo${rec.cap === 1 ? '' : 's'}`, 400);
+    }
+    const next: ShareRecord = { ...rec, final: chosen };
+    await putShare(next);
+    return publicStateFor(next);
+  },
+
+  /** Lock the client's final picks. Proofing -> submitted; needs at least
+   *  one pick, no more than the cap. */
   async submit(slug: string): Promise<SharePublicState> {
     await loadShares();
-    const rec = requireBySlug(slug);
-    if (kindOf(rec) === 'delivery') {
-      throw new AppError('This gallery does not use selections', 409);
+    const rec = requireProofing(slug);
+    const chosen = finalOf(rec);
+    if (chosen.length === 0) {
+      throw new AppError('Choose at least one photo before sending', 400);
     }
-    if (rec.phase !== 'proofing') {
-      throw new AppError('This selection has already been submitted', 409);
+    if (chosen.length > rec.cap) {
+      throw new AppError(`You can send at most ${rec.cap} photo${rec.cap === 1 ? '' : 's'}`, 400);
     }
-    if (rec.selections.length === 0) {
-      throw new AppError('Select at least one photo before submitting', 400);
-    }
-    const next: ShareRecord = { ...rec, phase: 'submitted', submittedAt: Date.now() };
+    const next: ShareRecord = { ...rec, final: chosen, phase: 'submitted', submittedAt: Date.now() };
     await putShare(next);
     return publicStateFor(next);
   },
@@ -500,8 +547,7 @@ export const sharesService = {
     const rec = requireBySlug(slug);
     assertPlainFilename(file);
     if (rec.phase !== 'delivery') throw new AppError('Downloads are not available yet', 403);
-    const allowed = kindOf(rec) === 'delivery' ? rec.items : rec.selections;
-    if (!allowed.includes(file)) throw new AppError('Not part of your selection', 403);
+    if (!deliverable(rec).includes(file)) throw new AppError('Not part of your final picks', 403);
     const abs = path.join(safeAlbumDir(rec.albumPath), EDITED_DIR, file);
     const stat = await fs.stat(abs).catch(() => {
       throw new AppError('File not found', 404);
@@ -516,7 +562,7 @@ export const sharesService = {
     const rec = requireBySlug(slug);
     if (rec.phase !== 'delivery') throw new AppError('Downloads are not available yet', 403);
     const editedDir = path.join(safeAlbumDir(rec.albumPath), EDITED_DIR);
-    const wanted = kindOf(rec) === 'delivery' ? rec.items : rec.selections;
+    const wanted = deliverable(rec);
     const out: { abs: string; name: string }[] = [];
     for (const file of wanted) {
       const abs = path.join(editedDir, file);

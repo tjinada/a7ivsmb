@@ -231,8 +231,10 @@ export interface ShareSummary {
   kind: ShareKind;
   phase: SharePhase;
   previewCount: number;     // edited JPGs published as previews
-  selectedCount: number;
-  selections: string[];     // the client's picked filenames (subset of previews)
+  selectedCount: number;    // shortlist size
+  selections: string[];     // the client's shortlist (subset of previews)
+  finalCount: number;       // final picks (the set that gets edited)
+  final: string[];          // the client's final picks (subset of selections)
   url: string;              // public client link (absolute when SHARE_HOST set)
   createdAt: number;        // epoch ms
   submittedAt: number | null;
@@ -252,7 +254,8 @@ export interface ShareProgress {
 /** One previewable image in the client proofing view. */
 export interface SharePublicItem {
   file: string;             // original edited filename; id for select/download
-  selected: boolean;
+  selected: boolean;        // on the client's shortlist (uncapped)
+  final: boolean;           // in the client's final picks (capped; subset of shortlist)
   w: number;                // preview pixel width  (0 if unknown)
   h: number;                // preview pixel height (0 if unknown)
 }
@@ -266,7 +269,8 @@ export interface SharePublicState {
   kind: ShareKind;
   phase: SharePhase;
   cap: number;
-  selectedCount: number;
+  selectedCount: number;    // shortlist size
+  finalCount: number;       // final picks chosen so far
   items: SharePublicItem[];
   downloadBytes?: number;   // delivery phase: total size of the downloadable originals
 }

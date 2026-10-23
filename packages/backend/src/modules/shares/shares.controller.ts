@@ -115,6 +115,17 @@ export const sharesController = {
     }
   },
 
+  async final(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      noStore(res);
+      const body = (req.body ?? {}) as { files?: unknown };
+      if (!Array.isArray(body.files)) throw new AppError('files must be an array', 400);
+      sendSuccess(res, await sharesService.setFinal(req.params.slug, body.files as string[]));
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async submit(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       noStore(res);
