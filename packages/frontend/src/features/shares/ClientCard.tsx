@@ -124,7 +124,7 @@ export function ClientCard({
   );
 
   return (
-    <div className={`rounded-2xl border bg-surface p-3 ${needsYou ? 'border-primary-500' : 'border-border'} ${wide ? 'xl:col-span-2' : ''}`}>
+    <div className={`rounded-2xl border bg-surface p-3.5 ${needsYou ? 'border-primary-500' : 'border-border'} ${wide ? 'xl:col-span-2' : ''}`}>
       <div className="flex items-center gap-3">
         {cover ? (
           <AuthImage src={thumbUrl(`${g.albumPath}/Edited/${cover}`)} alt="" className="h-11 w-11 flex-none overflow-hidden rounded-xl bg-base" />

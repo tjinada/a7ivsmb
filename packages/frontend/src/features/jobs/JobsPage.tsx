@@ -51,7 +51,7 @@ export function JobsPage() {
       </div>
 
       {/* One column; two side by side on wide screens. */}
-      <div className="mt-4 grid gap-2 xl:grid-cols-2">
+      <div className="mt-5 grid gap-3 xl:grid-cols-2">
         {jobsQuery.isLoading ? (
           <div className="flex items-center justify-center py-12 text-gray-500 xl:col-span-2"><Loader2 className="h-6 w-6 animate-spin" /></div>
         ) : shown.length === 0 ? (
@@ -75,7 +75,7 @@ function JobRow({ job }: { job: JobSummary }) {
   return (
     <Link
       to={hrefOf(job)}
-      className={`flex items-center gap-3 rounded-xl border bg-surface px-3 py-2.5 transition hover:border-border-strong ${
+      className={`flex items-center gap-3 rounded-xl border bg-surface px-3.5 py-3 transition hover:border-border-strong ${
         you ? 'border-primary-500/60' : 'border-border'
       }`}
     >
