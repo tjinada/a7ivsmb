@@ -240,6 +240,7 @@ function toSummary(rec: ShareRecord): ShareSummary {
     kind: kindOf(rec),
     phase: rec.phase,
     previewCount: rec.items.length,
+    cover: rec.items[0] ?? null,
     selectedCount: rec.selections.length,
     selections: [...rec.selections],
     finalCount: finalOf(rec).length,

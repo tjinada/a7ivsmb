@@ -241,6 +241,7 @@ export interface ShareSummary {
   kind: ShareKind;
   phase: SharePhase;
   previewCount: number;     // edited JPGs published as previews
+  cover: string | null;     // first published filename (in the album's Edited/), for a card cover
   selectedCount: number;    // shortlist size
   selections: string[];     // the client's shortlist (subset of previews)
   finalCount: number;       // final picks (the set that gets edited)

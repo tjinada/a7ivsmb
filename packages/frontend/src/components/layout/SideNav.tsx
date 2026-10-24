@@ -20,7 +20,7 @@ export function SideNav() {
         : { dot: 'bg-amber-400', text: 'FTP not listening' };
 
   return (
-    <aside className="hidden w-[220px] flex-none flex-col border-r border-border bg-base px-3.5 py-6 md:flex">
+    <aside className="hidden w-[240px] flex-none flex-col border-r border-border bg-base px-3.5 py-6 md:flex">
       <div className="flex items-center gap-2.5 px-2.5 pb-6">
         <BrandMark />
         <span className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">{brandName}</span>
@@ -37,8 +37,8 @@ export function SideNav() {
               }`
             }
           >
-            <Icon className="h-[18px] w-[18px]" />
-            {label}
+            <Icon className="h-[18px] w-[18px] flex-none" />
+            <span className="truncate">{label}</span>
             {(badges[to] ?? 0) > 0 && (
               <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary-500 px-1.5 text-[11px] font-bold text-on-accent">
                 {badges[to]}
