@@ -124,16 +124,20 @@ export function ClientCard({
   );
 
   return (
-    <div className={`rounded-2xl border bg-surface p-4 ${needsYou ? 'border-primary-500' : 'border-border'} ${wide ? 'xl:col-span-2' : ''}`}>
-      <div className="flex items-center gap-3">
+    // Cards fill their grid row, so side-by-side cards are the same height;
+    // a one-row card centres its content in that height.
+    <div className={`flex min-h-[104px] flex-col rounded-2xl border bg-surface p-4 ${compact ? 'justify-center' : ''} ${
+      needsYou ? 'border-primary-500' : 'border-border'
+    } ${wide ? 'xl:col-span-2' : ''}`}>
+      <div className="flex items-center gap-4">
         {cover ? (
-          <AuthImage src={thumbUrl(`${g.albumPath}/Edited/${cover}`)} alt="" className="h-11 w-11 flex-none overflow-hidden rounded-xl bg-base" />
+          <AuthImage src={thumbUrl(`${g.albumPath}/Edited/${cover}`)} alt="" className="h-16 w-16 flex-none overflow-hidden rounded-xl bg-base" />
         ) : (
-          <div className="h-11 w-11 flex-none rounded-xl bg-base" />
+          <div className="h-16 w-16 flex-none rounded-xl bg-base" />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
-            <Link to={`/gallery?path=${encodeURIComponent(g.albumPath)}`} className="truncate text-sm font-semibold text-gray-100 hover:underline">
+            <Link to={`/gallery?path=${encodeURIComponent(g.albumPath)}`} className="truncate text-[15px] font-semibold text-gray-100 hover:underline">
               {g.albumName}
             </Link>
             {job && (
@@ -142,7 +146,7 @@ export function ClientCard({
               </Link>
             )}
           </div>
-          <p className="truncate text-xs text-gray-500">
+          <p className="mt-1 truncate text-xs text-gray-500">
             {compact ? linkLine(g.links[0]) : `${g.links.length} link${g.links.length === 1 ? '' : 's'} · last activity ${fmtAgo(g.lastActivity)}`}
           </p>
           {/* On phones the pill sits under the name. */}
