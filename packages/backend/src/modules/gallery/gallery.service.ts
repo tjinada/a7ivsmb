@@ -954,17 +954,35 @@ export const galleryService = {
 
   /** Shot count and unrated count for a dated shoot folder (what the
    *  workflow's cull step shows). Zero counts when the folder is gone. */
-  async folderCounts(rel: string): Promise<{ count: number; unrated: number }> {
+  async folderCounts(rel: string): Promise<{ count: number; unrated: number; cover: string | null }> {
     await loadRatings();
     const root = path.resolve(config.photosPath);
     let abs: string;
     try {
       abs = safeResolve(rel);
     } catch {
-      return { count: 0, unrated: 0 };
+      return { count: 0, unrated: 0, cover: null };
     }
     const s = await folderSummary(abs, root);
-    return { count: s.count, unrated: s.unrated ?? 0 };
+    return { count: s.count, unrated: s.unrated ?? 0, cover: s.cover ?? null };
+  },
+
+  /** A thumbnail for an album row: its first edit, else its first selected
+   *  photo (JPG before RAW, then the pre-split Selected/ root). */
+  async albumCover(albumRel: string): Promise<string | null> {
+    const root = path.resolve(config.photosPath);
+    let abs: string;
+    try {
+      abs = safeResolve(albumRel);
+    } catch {
+      return null;
+    }
+    for (const sub of [['Edited'], ['Selected', 'JPG'], ['Selected', 'RAW'], ['Selected']]) {
+      const dir = path.join(abs, ...sub);
+      const names = await imageNamesIn(dir);
+      if (names.length > 0) return toPosix(path.relative(root, path.join(dir, names[0])));
+    }
+    return null;
   },
 
   /** True when `rel` is an existing dated Home folder (not under Albums/). */

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { ChevronRight, ListChecks, Loader2 } from 'lucide-react';
 import type { JobSummary } from '@sonycam/shared';
 import { prettyDate } from '@/lib/dates';
+import { AuthImage } from '@/features/gallery/AuthImage';
+import { thumbUrl } from '@/features/gallery/mediaUrl';
 import { STRIP, useJobs, needsOwner, daysInStep } from './api';
 
 type Filter = 'active' | 'waiting' | 'done';
@@ -79,6 +81,11 @@ function JobRow({ job }: { job: JobSummary }) {
         you ? 'border-primary-500/60' : 'border-border'
       }`}
     >
+      {job.cover ? (
+        <AuthImage src={thumbUrl(job.cover)} alt="" className={`h-11 w-11 flex-none overflow-hidden rounded-xl bg-base ${job.step === 'done' ? 'opacity-70' : ''}`} />
+      ) : (
+        <div className="h-11 w-11 flex-none rounded-xl bg-base" />
+      )}
       <div className="min-w-0 flex-1">
         {/* Line 1: what it is and where it stands. */}
         <div className="flex min-w-0 items-center gap-2">

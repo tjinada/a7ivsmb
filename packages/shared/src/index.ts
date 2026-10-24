@@ -325,6 +325,7 @@ export interface JobSummary extends Job {
   edited: number;            // album Edited/ count
   share: ShareSummary | null;
   waitingOnClient: boolean;  // step 'pick', mode 'client', share sent but not submitted
+  cover: string | null;      // share-relative thumbnail: the album's first edit, else first selected; the day's first photo before an album
 }
 
 /** Body of PATCH /api/jobs/:id. Every field optional; validated server-side. */

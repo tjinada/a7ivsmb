@@ -22,23 +22,26 @@ interface JobContext {
   unrated: number;
   edited: number;
   share: ShareSummary | null;
+  cover: string | null;
 }
 
 async function contextFor(job: Job): Promise<JobContext> {
   // A share that was revoked reads as no share.
   const share = job.shareId ? await sharesService.get(job.shareId) : null;
   if (job.albumPath) {
-    const album = (await galleryService.listAlbums()).find((a) => a.path === job.albumPath);
+    const [albums, cover] = await Promise.all([galleryService.listAlbums(), galleryService.albumCover(job.albumPath)]);
+    const album = albums.find((a) => a.path === job.albumPath);
     return {
       albumName: job.albumPath.slice(ALBUM_PREFIX.length),
       shots: album?.shots ?? 0,
       unrated: 0,
       edited: album?.edited ?? 0,
       share,
+      cover,
     };
   }
-  const { count, unrated } = await galleryService.folderCounts(job.folderPath);
-  return { albumName: null, shots: count, unrated, edited: 0, share };
+  const { count, unrated, cover } = await galleryService.folderCounts(job.folderPath);
+  return { albumName: null, shots: count, unrated, edited: 0, share, cover };
 }
 
 function summarize(job: Job, ctx: JobContext): JobSummary {
