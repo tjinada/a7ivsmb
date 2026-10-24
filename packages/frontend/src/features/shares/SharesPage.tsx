@@ -33,7 +33,7 @@ export function SharesPage() {
   const shown = groups.filter((g) => filter === 'all' || g.state === filter);
 
   return (
-    <div className="mx-auto max-w-3xl p-4">
+    <div className="mx-auto max-w-3xl p-4 xl:max-w-6xl">
       <div className="flex items-baseline gap-2.5">
         <h1 className="text-xl font-semibold tracking-tight">Shared with clients</h1>
         {shares.length > 0 && (
@@ -51,11 +51,13 @@ export function SharesPage() {
         ))}
       </div>
 
-      <div className="mt-4 space-y-2.5">
+      {/* One column; two side by side on wide screens (cards needing you or
+          showing picks take the full width). */}
+      <div className="mt-4 grid items-start gap-2.5 xl:grid-cols-2">
         {sharesQuery.isLoading ? (
-          <div className="flex items-center justify-center py-12 text-gray-500"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          <div className="flex items-center justify-center py-12 text-gray-500 xl:col-span-2"><Loader2 className="h-6 w-6 animate-spin" /></div>
         ) : shown.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-14 text-center text-gray-400">
+          <div className="flex flex-col items-center gap-3 py-14 text-center text-gray-400 xl:col-span-2">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface"><Share2 className="h-7 w-7 text-gray-600" /></div>
             <p className="max-w-xs text-sm">
               {shares.length === 0 ? 'Nothing shared yet. Open an album and create a link for your client.' : 'Nothing here.'}

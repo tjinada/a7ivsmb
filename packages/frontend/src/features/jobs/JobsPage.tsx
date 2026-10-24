@@ -39,7 +39,7 @@ export function JobsPage() {
   const shown = jobs.filter((j) => filterOf(j) === filter);
 
   return (
-    <div className="mx-auto max-w-3xl p-4">
+    <div className="mx-auto max-w-3xl p-4 xl:max-w-6xl">
       <h1 className="text-xl font-semibold tracking-tight">Shoots</h1>
       <div className="mt-3 flex flex-wrap gap-2">
         {([['active', 'Needs you'], ['waiting', 'Waiting on client'], ['done', 'Done']] as [Filter, string][]).map(([f, label]) => (
@@ -50,11 +50,12 @@ export function JobsPage() {
         ))}
       </div>
 
-      <div className="mt-4 space-y-2">
+      {/* One column; two side by side on wide screens. */}
+      <div className="mt-4 grid gap-2 xl:grid-cols-2">
         {jobsQuery.isLoading ? (
-          <div className="flex items-center justify-center py-12 text-gray-500"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          <div className="flex items-center justify-center py-12 text-gray-500 xl:col-span-2"><Loader2 className="h-6 w-6 animate-spin" /></div>
         ) : shown.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-14 text-center text-gray-400">
+          <div className="flex flex-col items-center gap-3 py-14 text-center text-gray-400 xl:col-span-2">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface"><ListChecks className="h-7 w-7 text-gray-600" /></div>
             <p className="max-w-xs text-sm">
               {jobs.length === 0 ? 'No shoots tracked yet. Open a dated folder and tap Track this shoot.' : 'Nothing here.'}
@@ -74,32 +75,33 @@ function JobRow({ job }: { job: JobSummary }) {
   return (
     <Link
       to={hrefOf(job)}
-      className={`flex items-center gap-3 rounded-2xl border bg-surface p-3 transition hover:border-border-strong ${
+      className={`flex items-center gap-3 rounded-xl border bg-surface px-3 py-2.5 transition hover:border-border-strong ${
         you ? 'border-primary-500/60' : 'border-border'
-      } ${job.step === 'done' ? 'opacity-70' : ''}`}
+      }`}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-gray-100">{job.albumName ?? prettyDate(job.folderPath.split('/').pop() ?? job.folderPath)}</p>
-        <p className="truncate text-xs text-gray-500">
-          {job.folderPath}{!job.albumPath && ' · no album yet'}
-        </p>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-            you ? 'bg-primary-500/15 text-primary-400' : job.step === 'done' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-base text-gray-400'
+        {/* Line 1: what it is and where it stands. */}
+        <div className="flex min-w-0 items-center gap-2">
+          <p className={`truncate text-sm font-semibold ${job.step === 'done' ? 'text-gray-400' : 'text-gray-100'}`}>
+            {job.albumName ?? prettyDate(job.folderPath.split('/').pop() ?? job.folderPath)}
+          </p>
+          <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-medium ${
+            you ? 'bg-primary-500/15 text-primary-400' : job.step === 'done' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/[0.06] text-gray-400'
           }`}>
             {job.waitingOnClient ? '③ Waiting for client' : STEP_LABEL[job.step]}
           </span>
-          <span className="flex gap-1" aria-hidden>
+          <span className="hidden flex-none gap-1 sm:flex" aria-hidden>
             {STRIP.map((s, i) => (
-              <span key={s.step} className={`h-2 w-2 rounded-full ${i < cur ? 'bg-emerald-500' : i === cur ? 'bg-primary-500' : 'bg-border-strong'}`} />
+              <span key={s.step} className={`h-1.5 w-1.5 rounded-full ${i < cur ? 'bg-emerald-500' : i === cur ? 'bg-primary-500' : 'bg-border-strong'}`} />
             ))}
           </span>
         </div>
-      </div>
-      <div className="flex-none text-right text-xs tabular-nums">
-        <p className="text-gray-200">{job.albumPath ? `${job.edited} / ${job.shots}` : `— / ${job.shots}`}</p>
-        <p className="text-gray-500">{job.albumPath ? 'edited / shots' : 'shots'}</p>
-        {inStep(job) && <p className="mt-1 text-gray-500">{inStep(job)} in step</p>}
+        {/* Line 2: the numbers. */}
+        <p className="mt-0.5 truncate text-xs tabular-nums text-gray-500">
+          {job.folderPath}
+          {job.albumPath ? ` · ${job.edited} of ${job.shots} edited` : ` · ${job.shots} shots · no album yet`}
+          {inStep(job) && ` · ${inStep(job)} in step`}
+        </p>
       </div>
       <ChevronRight className="h-4 w-4 flex-none text-gray-600" />
     </Link>

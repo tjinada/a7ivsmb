@@ -97,13 +97,39 @@ export function ClientCard({
   );
   const refreshing = g.links.find((s) => a.refreshing(s));
 
+  // One link and nothing waiting on you: the whole album fits on one row.
+  const compact = g.links.length === 1 && !needsYou;
+  // Wide screens show cards in two columns; anything needing room or
+  // attention takes the full width.
+  const wide = !!needsYou || picksOpen;
+
+  /** Copy + ⋯ for one link. */
+  const controls = (s: ShareSummary) => (
+    <>
+      <button type="button" onClick={() => a.copyLink(s)} className={BTN}>
+        {a.copiedId === s.id ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+        <span className="hidden sm:inline">{a.copiedId === s.id ? 'Copied' : 'Copy link'}</span>
+        <span className="sm:hidden">{a.copiedId === s.id ? 'Copied' : 'Copy'}</span>
+      </button>
+      <LinkMenu
+        share={s}
+        busy={a.busyFor(s)}
+        editedInAlbum={editedInAlbum}
+        onUpdate={() => a.refresh(s)}
+        onPicks={s.kind !== 'delivery' && s.selectedCount > 0 ? () => setPicksOpen((o) => !o) : undefined}
+        picksOpen={picksOpen}
+        onTurnOff={() => setRevoking(s)}
+      />
+    </>
+  );
+
   return (
-    <div className={`rounded-2xl border bg-surface p-3 ${needsYou ? 'border-primary-500' : 'border-border'}`}>
+    <div className={`rounded-2xl border bg-surface p-3 ${needsYou ? 'border-primary-500' : 'border-border'} ${wide ? 'xl:col-span-2' : ''}`}>
       <div className="flex items-center gap-3">
         {cover ? (
-          <AuthImage src={thumbUrl(`${g.albumPath}/Edited/${cover}`)} alt="" className="h-12 w-12 flex-none overflow-hidden rounded-xl bg-base sm:h-[52px] sm:w-[52px]" />
+          <AuthImage src={thumbUrl(`${g.albumPath}/Edited/${cover}`)} alt="" className="h-11 w-11 flex-none overflow-hidden rounded-xl bg-base" />
         ) : (
-          <div className="h-12 w-12 flex-none rounded-xl bg-base sm:h-[52px] sm:w-[52px]" />
+          <div className="h-11 w-11 flex-none rounded-xl bg-base" />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
@@ -117,17 +143,18 @@ export function ClientCard({
             )}
           </div>
           <p className="truncate text-xs text-gray-500">
-            {g.links.length === 1 ? linkLine(g.links[0]) : `${g.links.length} links · last activity ${fmtAgo(g.lastActivity)}`}
+            {compact ? linkLine(g.links[0]) : `${g.links.length} link${g.links.length === 1 ? '' : 's'} · last activity ${fmtAgo(g.lastActivity)}`}
           </p>
+          {/* On phones the pill sits under the name. */}
+          <span className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold sm:hidden ${pill.cls}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />{pill.text}
+          </span>
         </div>
         <span className={`hidden flex-none items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold sm:inline-flex ${pill.cls}`}>
           <span className="h-1.5 w-1.5 rounded-full bg-current" />{pill.text}
         </span>
+        {compact && controls(g.links[0])}
       </div>
-      {/* On phones the pill gets its own line under the name. */}
-      <span className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold sm:hidden ${pill.cls}`}>
-        <span className="h-1.5 w-1.5 rounded-full bg-current" />{pill.text}
-      </span>
 
       {needsYou && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -141,30 +168,19 @@ export function ClientCard({
         </div>
       )}
 
-      <div className="mt-3 divide-y divide-border border-t border-border">
-        {g.links.map((s) => (
-          <div key={s.id} className="flex items-center gap-2.5 pt-2.5 [&:not(:first-child)]:mt-2.5">
-            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-white/[0.06] text-gray-400">
-              {s.kind === 'delivery' ? <Download className="h-3.5 w-3.5" /> : <Heart className="h-3.5 w-3.5" />}
-            </span>
-            <span className="min-w-0 flex-1 text-xs leading-snug text-gray-300 sm:truncate">{linkLine(s)}</span>
-            <button type="button" onClick={() => a.copyLink(s)} className={BTN}>
-              {a.copiedId === s.id ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline">{a.copiedId === s.id ? 'Copied' : 'Copy link'}</span>
-              <span className="sm:hidden">{a.copiedId === s.id ? 'Copied' : 'Copy'}</span>
-            </button>
-            <LinkMenu
-              share={s}
-              busy={a.busyFor(s)}
-              editedInAlbum={editedInAlbum}
-              onUpdate={() => a.refresh(s)}
-              onPicks={s.kind !== 'delivery' && s.selectedCount > 0 ? () => setPicksOpen((o) => !o) : undefined}
-              picksOpen={picksOpen}
-              onTurnOff={() => setRevoking(s)}
-            />
-          </div>
-        ))}
-      </div>
+      {!compact && (
+        <div className="mt-2.5 divide-y divide-border border-t border-border">
+          {g.links.map((s) => (
+            <div key={s.id} className="flex items-center gap-2.5 py-2 last:pb-0">
+              <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-white/[0.06] text-gray-400">
+                {s.kind === 'delivery' ? <Download className="h-3.5 w-3.5" /> : <Heart className="h-3.5 w-3.5" />}
+              </span>
+              <span className="min-w-0 flex-1 text-xs leading-snug text-gray-300 sm:truncate">{linkLine(s)}</span>
+              {controls(s)}
+            </div>
+          ))}
+        </div>
+      )}
 
       {stale && !refreshing && editedInAlbum !== undefined && (
         <div className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-primary-500/45 bg-primary-500/[0.07] px-3 py-2 text-xs text-primary-300">
