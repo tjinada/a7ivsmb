@@ -118,7 +118,7 @@ export function JobPanel({ job, here }: { job: JobSummary; here: 'folder' | 'alb
       {dialog === 'remove' && (
         <ConfirmDialog
           title="Stop tracking this shoot?"
-          message="Removes the workflow only. The folder, album, edits and any client link stay as they are."
+          message="Stops tracking only. The folder, album, edits and any client link stay as they are."
           confirmLabel="Stop tracking"
           busy={remove.isPending}
           onConfirm={() => remove.mutate(job.id, { onSuccess: () => setDialog(null) })}
@@ -190,7 +190,7 @@ function StepBody({
               <button type="button" className={PRIMARY} disabled={busy} onClick={() => patch({ step: 'deliver' })}>
                 <Send className="h-3.5 w-3.5" /> Continue to send
               </button>
-              <Link to={`/shares?album=${encodeURIComponent(share.albumPath)}`} className={BTN}>View picks</Link>
+              <Link to={`/clients?album=${encodeURIComponent(share.albumPath)}`} className={BTN}>View picks</Link>
             </Actions>
           </Card>
         );
@@ -331,7 +331,7 @@ function ShareLinkActions({ share }: { share: NonNullable<JobSummary['share']> }
         {actions.copiedId === share.id ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
         {actions.copiedId === share.id ? 'Copied' : 'Copy link'}
       </button>
-      <Link to={`/shares?album=${encodeURIComponent(share.albumPath)}`} className={BTN}>Manage</Link>
+      <Link to={`/clients?album=${encodeURIComponent(share.albumPath)}`} className={BTN}>Manage</Link>
     </Actions>
   );
 }

@@ -170,7 +170,7 @@ export function AlbumPanel({
             </button>
           )}
           {share ? (
-            <Link to={`/shares?album=${encodeURIComponent(share.albumPath)}`} className={BTN}>Manage</Link>
+            <Link to={`/clients?album=${encodeURIComponent(share.albumPath)}`} className={BTN}>Manage</Link>
           ) : (
             <button type="button" onClick={() => (counts.edited > 0 ? onCreateShare() : toast.error('Upload edited JPGs first'))} className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-semibold text-on-accent transition hover:bg-primary-400">
               Create link

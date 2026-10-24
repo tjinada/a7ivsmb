@@ -60,13 +60,13 @@ export function HomeStrip({ folders, onOpen }: { folders: FolderEntry[]; onOpen:
       )}
 
       {jobs.length > 0 && (
-        <Link to="/jobs" className={`${CARD} ${jobsForYou.length > 0 ? 'border-primary-500' : 'border-border'}`}>
+        <Link to="/shoots" className={`${CARD} ${jobsForYou.length > 0 ? 'border-primary-500' : 'border-border'}`}>
           <span className={`flex h-11 w-11 flex-none items-center justify-center rounded-lg ${jobsForYou.length > 0 ? 'bg-primary-500/15 text-primary-400' : 'bg-white/[0.06] text-gray-200'}`}>
             <ListChecks className="h-5 w-5" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold text-gray-100">
-              {jobsForYou.length > 0 ? `${jobsForYou.length} job${jobsForYou.length === 1 ? '' : 's'} need${jobsForYou.length === 1 ? 's' : ''} you` : 'Jobs'}
+              {jobsForYou.length > 0 ? `${jobsForYou.length} shoot${jobsForYou.length === 1 ? '' : 's'} need${jobsForYou.length === 1 ? 's' : ''} you` : 'Shoots'}
             </span>
             <span className="block truncate text-xs text-gray-400">
               {jobsForYou.length > 0
@@ -78,13 +78,13 @@ export function HomeStrip({ folders, onOpen }: { folders: FolderEntry[]; onOpen:
         </Link>
       )}
 
-      <Link to="/shares" className={`${CARD} ${needsYou.length > 0 ? 'border-primary-500' : 'border-border'}`}>
+      <Link to="/clients" className={`${CARD} ${needsYou.length > 0 ? 'border-primary-500' : 'border-border'}`}>
         <span className={`flex h-11 w-11 flex-none items-center justify-center rounded-lg ${needsYou.length > 0 ? 'bg-primary-500/15 text-primary-400' : 'bg-white/[0.06] text-gray-200'}`}>
           <Share2 className="h-5 w-5" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold text-gray-100">
-            {needsYou.length > 0 ? `${needsYou.length} share${needsYou.length === 1 ? '' : 's'} need${needsYou.length === 1 ? 's' : ''} you` : 'Shares'}
+            {needsYou.length > 0 ? `Picks in from ${needsYou.length} client${needsYou.length === 1 ? '' : 's'}` : 'Shared with clients'}
           </span>
           <span className="block truncate text-xs text-gray-400">
             {needsYou.length > 0

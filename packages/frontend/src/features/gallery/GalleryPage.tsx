@@ -298,7 +298,7 @@ export function GalleryPage() {
             className="mr-1 flex items-center gap-1.5 rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-semibold text-on-accent transition hover:bg-primary-400 disabled:opacity-50"
           >
             {startJobMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-            <span className="sm:hidden">Start</span><span className="hidden sm:inline">Start workflow</span>
+            <span className="sm:hidden">Track</span><span className="hidden sm:inline">Track this shoot</span>
           </button>
         )}
       />

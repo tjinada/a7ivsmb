@@ -10,7 +10,7 @@ export function TabBar() {
       className="flex flex-shrink-0 border-t border-border bg-base md:hidden"
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom) - 0.5rem, 0.25rem)' }}
     >
-      {NAV.map(({ to, label, Icon }) => (
+      {NAV.map(({ to, label, short, Icon }) => (
         <NavLink
           key={to}
           to={to}
@@ -21,7 +21,7 @@ export function TabBar() {
           }
         >
           <Icon className="h-5 w-5" />
-          {label}
+          {short ?? label}
           {(badges[to] ?? 0) > 0 && (
             <span className="absolute left-[calc(50%+6px)] top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary-500 px-1.5 text-[11px] font-bold text-on-accent">
               {badges[to]}

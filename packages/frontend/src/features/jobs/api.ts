@@ -51,7 +51,7 @@ export function useStartJob(opts: { onError: (msg: string) => void }) {
       return res.data.data;
     },
     onSuccess: () => void invalidate(),
-    onError: (err) => opts.onError(serverMessage(err, 'Could not start the workflow')),
+    onError: (err) => opts.onError(serverMessage(err, 'Could not start tracking this shoot')),
   });
 }
 
@@ -63,7 +63,7 @@ export function useUpdateJob(opts: { onError: (msg: string) => void }) {
       return res.data.data;
     },
     onSuccess: () => void invalidate(),
-    onError: (err) => opts.onError(serverMessage(err, 'Could not update the workflow')),
+    onError: (err) => opts.onError(serverMessage(err, 'Could not update this shoot')),
   });
 }
 
@@ -72,7 +72,7 @@ export function useRemoveJob(opts: { onError: (msg: string) => void }) {
   return useMutation({
     mutationFn: (id: string) => api.delete(`/jobs/${id}`),
     onSuccess: () => void invalidate(),
-    onError: (err) => opts.onError(serverMessage(err, 'Could not remove the workflow')),
+    onError: (err) => opts.onError(serverMessage(err, 'Could not stop tracking this shoot')),
   });
 }
 

@@ -110,9 +110,9 @@ export const jobsService = {
     await loadJobs();
     const cleaned = (folderPath ?? '').trim().replace(/\/+$/, '');
     if (!(await galleryService.isDatedFolder(cleaned))) {
-      throw new AppError('A workflow starts from a dated shoot folder', 400);
+      throw new AppError('Only a dated shoot folder can be tracked', 400);
     }
-    if (jobForFolder(cleaned)) throw new AppError('This folder already has a workflow', 409);
+    if (jobForFolder(cleaned)) throw new AppError('This shoot is already being tracked', 409);
     const now = Date.now();
     const job: Job = {
       id: newId(),
@@ -151,7 +151,7 @@ export const jobsService = {
         const exists = (await galleryService.listAlbums()).some((a) => a.path === patch.albumPath);
         if (!exists) throw new AppError('Album not found', 404);
         const other = jobForAlbum(patch.albumPath);
-        if (other && other.id !== cur.id) throw new AppError('That album already belongs to another workflow', 409);
+        if (other && other.id !== cur.id) throw new AppError('That album already belongs to another shoot', 409);
         next.albumPath = patch.albumPath;
       }
     }

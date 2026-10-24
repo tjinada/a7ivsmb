@@ -40,7 +40,7 @@ export function JobsPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-4">
-      <h1 className="text-xl font-semibold tracking-tight">Jobs</h1>
+      <h1 className="text-xl font-semibold tracking-tight">Shoots</h1>
       <div className="mt-3 flex flex-wrap gap-2">
         {([['active', 'Needs you'], ['waiting', 'Waiting on client'], ['done', 'Done']] as [Filter, string][]).map(([f, label]) => (
           <button key={f} type="button" onClick={() => setFilter(f)} className={`flex items-center gap-1.5 ${filter === f ? PILL_ON : PILL}`}>
@@ -57,7 +57,7 @@ export function JobsPage() {
           <div className="flex flex-col items-center gap-3 py-14 text-center text-gray-400">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface"><ListChecks className="h-7 w-7 text-gray-600" /></div>
             <p className="max-w-xs text-sm">
-              {jobs.length === 0 ? 'No jobs yet. Open a shoot folder and tap Start workflow.' : 'Nothing here.'}
+              {jobs.length === 0 ? 'No shoots tracked yet. Open a dated folder and tap Track this shoot.' : 'Nothing here.'}
             </p>
           </div>
         ) : (
