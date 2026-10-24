@@ -41,7 +41,8 @@ export function JobsPage() {
   const shown = jobs.filter((j) => filterOf(j) === filter);
 
   return (
-    <div className="mx-auto max-w-3xl p-4 xl:max-w-6xl">
+    // Same width and gutters as the gallery, so the pages line up.
+    <div className="mx-auto max-w-screen-2xl p-3 sm:p-4">
       <h1 className="text-xl font-semibold tracking-tight">Shoots</h1>
       <div className="mt-3 flex flex-wrap gap-2">
         {([['active', 'Needs you'], ['waiting', 'Waiting on client'], ['done', 'Done']] as [Filter, string][]).map(([f, label]) => (
@@ -77,19 +78,19 @@ function JobRow({ job }: { job: JobSummary }) {
   return (
     <Link
       to={hrefOf(job)}
-      className={`flex items-center gap-3 rounded-xl border bg-surface px-4 py-3.5 transition hover:border-border-strong ${
+      className={`flex items-center gap-4 rounded-2xl border bg-surface px-4 py-4 transition hover:border-border-strong ${
         you ? 'border-primary-500/60' : 'border-border'
       }`}
     >
       {job.cover ? (
-        <AuthImage src={thumbUrl(job.cover)} alt="" className={`h-11 w-11 flex-none overflow-hidden rounded-xl bg-base ${job.step === 'done' ? 'opacity-70' : ''}`} />
+        <AuthImage src={thumbUrl(job.cover)} alt="" className={`h-16 w-16 flex-none overflow-hidden rounded-xl bg-base ${job.step === 'done' ? 'opacity-70' : ''}`} />
       ) : (
-        <div className="h-11 w-11 flex-none rounded-xl bg-base" />
+        <div className="h-16 w-16 flex-none rounded-xl bg-base" />
       )}
       <div className="min-w-0 flex-1">
         {/* Line 1: what it is and where it stands. */}
         <div className="flex min-w-0 items-center gap-2">
-          <p className={`truncate text-sm font-semibold ${job.step === 'done' ? 'text-gray-400' : 'text-gray-100'}`}>
+          <p className={`truncate text-[15px] font-semibold ${job.step === 'done' ? 'text-gray-400' : 'text-gray-100'}`}>
             {job.albumName ?? prettyDate(job.folderPath.split('/').pop() ?? job.folderPath)}
           </p>
           <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-medium ${
@@ -104,7 +105,7 @@ function JobRow({ job }: { job: JobSummary }) {
           </span>
         </div>
         {/* Line 2: the numbers. */}
-        <p className="mt-0.5 truncate text-xs tabular-nums text-gray-500">
+        <p className="mt-1.5 truncate text-xs tabular-nums text-gray-500">
           {job.folderPath}
           {job.albumPath ? ` · ${job.edited} of ${job.shots} edited` : ` · ${job.shots} shots · no album yet`}
           {inStep(job) && ` · ${inStep(job)} in step`}

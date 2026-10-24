@@ -33,7 +33,8 @@ export function SharesPage() {
   const shown = groups.filter((g) => filter === 'all' || g.state === filter);
 
   return (
-    <div className="mx-auto max-w-3xl p-4 xl:max-w-6xl">
+    // Same width and gutters as the gallery, so the pages line up.
+    <div className="mx-auto max-w-screen-2xl p-3 sm:p-4">
       <div className="flex items-baseline gap-2.5">
         <h1 className="text-xl font-semibold tracking-tight">Shared with clients</h1>
         {shares.length > 0 && (
