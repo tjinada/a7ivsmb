@@ -124,19 +124,22 @@ export function ClientCard({
   );
 
   return (
-    // Every card is the same fixed height (sized for an album with two links,
-    // or picks-in with its buttons); a one-row card centres its content and
-    // anything beyond that scrolls inside the card. Only a card with its picks
-    // open grows. Phones keep natural heights.
-    <div className={`flex flex-col rounded-2xl border bg-surface p-4 ${picksOpen ? '' : 'sm:h-[192px]'} ${compact ? 'justify-center' : ''} ${
+    // Every card is the same fixed height on tablet and up, with a large cover
+    // filling the left side; the header and links sit beside it, a one-row
+    // card centres its header, and anything beyond the height scrolls inside
+    // the card. Only a card with its picks open grows. On phones the cover is
+    // smaller and the links run full width under it.
+    <div className={`grid grid-cols-[5rem_minmax(0,1fr)] gap-x-4 rounded-2xl border bg-surface p-4 sm:grid-cols-[10rem_minmax(0,1fr)] ${
+      compact ? 'sm:grid-rows-[minmax(0,1fr)_auto]' : 'sm:grid-rows-[auto_minmax(0,1fr)]'
+    } ${picksOpen ? '' : 'sm:h-[192px]'} ${
       needsYou ? 'border-primary-500' : 'border-border'
     } ${wide ? 'xl:col-span-2' : ''}`}>
-      <div className="flex flex-none items-center gap-4">
-        {cover ? (
-          <AuthImage src={thumbUrl(`${g.albumPath}/Edited/${cover}`)} alt="" className="h-16 w-16 flex-none overflow-hidden rounded-xl bg-base" />
-        ) : (
-          <div className="h-16 w-16 flex-none rounded-xl bg-base" />
-        )}
+      {cover ? (
+        <AuthImage src={thumbUrl(`${g.albumPath}/Edited/${cover}`)} alt="" className="h-20 w-20 self-start overflow-hidden rounded-xl bg-base sm:row-span-2 sm:h-40 sm:w-40" />
+      ) : (
+        <div className="h-20 w-20 self-start rounded-xl bg-base sm:row-span-2 sm:h-40 sm:w-40" />
+      )}
+      <div className={`flex min-w-0 items-center gap-4 ${compact ? 'self-center' : 'self-start sm:pt-1'}`}>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
             <Link to={`/gallery?path=${encodeURIComponent(g.albumPath)}`} className="truncate text-[15px] font-semibold text-gray-100 hover:underline">
@@ -162,7 +165,7 @@ export function ClientCard({
         {compact && controls(g.links[0])}
       </div>
 
-      <div className={`min-h-0 overflow-y-auto ${compact ? '' : 'flex-1'}`}>
+      <div className="col-span-2 min-h-0 overflow-y-auto sm:col-span-1 sm:col-start-2">
       {needsYou && (
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" onClick={() => setPicksOpen((o) => !o)} className="flex items-center gap-1.5 rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-semibold text-on-accent transition hover:bg-primary-400">

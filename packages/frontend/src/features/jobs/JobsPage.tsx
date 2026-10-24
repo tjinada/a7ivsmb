@@ -83,9 +83,9 @@ function JobRow({ job }: { job: JobSummary }) {
       }`}
     >
       {job.cover ? (
-        <AuthImage src={thumbUrl(job.cover)} alt="" className={`h-16 w-16 flex-none overflow-hidden rounded-xl bg-base ${job.step === 'done' ? 'opacity-70' : ''}`} />
+        <AuthImage src={thumbUrl(job.cover)} alt="" className={`h-20 w-20 flex-none overflow-hidden rounded-xl bg-base sm:h-40 sm:w-40 ${job.step === 'done' ? 'opacity-70' : ''}`} />
       ) : (
-        <div className="h-16 w-16 flex-none rounded-xl bg-base" />
+        <div className="h-20 w-20 flex-none rounded-xl bg-base sm:h-40 sm:w-40" />
       )}
       <div className="min-w-0 flex-1">
         {/* Line 1: what it is and where it stands. */}
