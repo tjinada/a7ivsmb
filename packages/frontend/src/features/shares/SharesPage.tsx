@@ -53,7 +53,7 @@ export function SharesPage() {
 
       {/* One column; two side by side on wide screens (cards needing you or
           showing picks take the full width). */}
-      <div className="mt-5 grid items-start gap-4 xl:grid-cols-2">
+      <div className="mt-6 grid items-start gap-x-5 gap-y-6 xl:grid-cols-2">
         {sharesQuery.isLoading ? (
           <div className="flex items-center justify-center py-12 text-gray-500 xl:col-span-2"><Loader2 className="h-6 w-6 animate-spin" /></div>
         ) : shown.length === 0 ? (
