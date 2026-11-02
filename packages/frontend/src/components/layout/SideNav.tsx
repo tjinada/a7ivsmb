@@ -1,8 +1,8 @@
-import { NavLink } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAppConfig } from '@/lib/useAppConfig';
 import { useFtpStatus } from '@/features/transfers/useFtpStatus';
 import { BrandMark } from './BrandMark';
-import { NAV, useNavBadges } from './nav';
+import { NAV, useIsNavActive, useNavBadges } from './nav';
 
 /**
  * Desktop navigation: a fixed-width sidebar with the brand, the sections, the
@@ -12,6 +12,7 @@ import { NAV, useNavBadges } from './nav';
 export function SideNav() {
   const { brandName } = useAppConfig();
   const badges = useNavBadges();
+  const isActive = useIsNavActive();
   const status = useFtpStatus().data;
   const ftp = !status
     ? { dot: 'bg-gray-600', text: 'FTP status unknown' }
@@ -28,14 +29,13 @@ export function SideNav() {
 
       <nav className="flex flex-col gap-1.5">
         {NAV.map(({ to, label, Icon }) => (
-          <NavLink
+          <Link
             key={to}
             to={to}
-            className={({ isActive }) =>
-              `flex h-10 items-center gap-2.5 rounded-xl px-2.5 text-sm transition ${
-                isActive ? 'bg-primary-500/[0.12] font-semibold text-primary-500' : 'font-medium text-gray-100 hover:bg-surface'
-              }`
-            }
+            aria-current={isActive(to) ? 'page' : undefined}
+            className={`flex h-10 items-center gap-2.5 rounded-xl px-2.5 text-sm transition ${
+              isActive(to) ? 'bg-primary-500/[0.12] font-semibold text-primary-500' : 'font-medium text-gray-100 hover:bg-surface'
+            }`}
           >
             <Icon className="h-[18px] w-[18px] flex-none" />
             <span className="truncate">{label}</span>
@@ -47,7 +47,7 @@ export function SideNav() {
             {to === '/transfers' && status?.activeConnections ? (
               <span className="ml-auto text-[11px] font-semibold text-emerald-400">{status.activeConnections} live</span>
             ) : null}
-          </NavLink>
+          </Link>
         ))}
       </nav>
 

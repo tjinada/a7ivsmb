@@ -16,7 +16,6 @@ import { FolderGrid, SectionLabel } from './FolderGrid';
 import { PhotoGrid, TimelineGrid } from './PhotoGrid';
 import { BulkActionBar, type BulkBusy } from './BulkActionBar';
 import { EditedFolderCard } from './AlbumShareCard';
-import { HomeStrip } from './HomeStrip';
 import { AlbumPanel, useAlbumPanel } from './AlbumPanel';
 import { Lightbox } from './Lightbox';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -294,7 +293,6 @@ export function GalleryPage() {
           </div>
         ) : hasContent ? (
           <div className="mx-auto max-w-screen-2xl p-3">
-            {!isTimeline && path === '' && <HomeStrip folders={folders} onOpen={setPath} />}
             {!isTimeline && isAlbumRoot && (
               <AlbumPanel albumName={albumName} panel={panel} onCreateShare={() => open({ kind: 'shareCreate' })} />
             )}

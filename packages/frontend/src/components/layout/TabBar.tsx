@@ -1,9 +1,10 @@
-import { NavLink } from 'react-router-dom';
-import { NAV, useNavBadges } from './nav';
+import { Link } from 'react-router-dom';
+import { NAV, useIsNavActive, useNavBadges } from './nav';
 
 /** Phone navigation: the bottom tab bar. Hidden at md+ where SideNav takes over. */
 export function TabBar() {
   const badges = useNavBadges();
+  const isActive = useIsNavActive();
 
   return (
     <nav
@@ -11,14 +12,13 @@ export function TabBar() {
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom) - 0.5rem, 0.25rem)' }}
     >
       {NAV.map(({ to, label, short, Icon }) => (
-        <NavLink
+        <Link
           key={to}
           to={to}
-          className={({ isActive }) =>
-            `relative flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium touch-manipulation select-none ${
-              isActive ? 'text-primary-500' : 'text-gray-400 hover:text-gray-200'
-            }`
-          }
+          aria-current={isActive(to) ? 'page' : undefined}
+          className={`relative flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium touch-manipulation select-none ${
+            isActive(to) ? 'text-primary-500' : 'text-gray-400 hover:text-gray-200'
+          }`}
         >
           <Icon className="h-5 w-5" />
           {short ?? label}
@@ -27,7 +27,7 @@ export function TabBar() {
               {badges[to]}
             </span>
           )}
-        </NavLink>
+        </Link>
       ))}
     </nav>
   );
