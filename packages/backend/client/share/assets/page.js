@@ -45,7 +45,10 @@
   // Previews/thumbs are re-rendered without the watermark on delivery and are
   // cached for a day, so the delivery phase asks for a different URL.
   const ver = () => (state && state.phase === 'delivery' ? '?v=d' : '');
-  const thumbUrl = (f) => API + '/thumb/' + encodeURIComponent(f) + ver();
+  // THUMB_REV changes the URL when thumbs are re-rendered at a new size, so
+  // day-cached old ones aren't reused.
+  const THUMB_REV = 'r2';
+  const thumbUrl = (f) => API + '/thumb/' + encodeURIComponent(f) + '?' + THUMB_REV + ver().replace('?', '&');
   const previewUrl = (f) => API + '/preview/' + encodeURIComponent(f) + ver();
   const downloadUrl = (f) => API + '/download/' + encodeURIComponent(f);
 
@@ -211,7 +214,9 @@
     if (!W) return;
     const wide = W >= 900;
     const gap = wide ? 6 : 4;
-    const target = wide ? 240 : Math.min(150, Math.round(W * 0.42));
+    // Rows scale with the space: a quarter of the width on desktop (280–440),
+    // three quarters on a phone, so a landscape shot often gets its own row.
+    const target = wide ? Math.max(280, Math.min(440, Math.round(W / 4))) : Math.round(W * 0.76);
     const aspect = (it) => (it.w > 0 && it.h > 0 ? it.w / it.h : 1.5);
     const rows = [];
     let row = [];

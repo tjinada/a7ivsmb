@@ -92,8 +92,9 @@ export const config = {
     whatsNext:
       (process.env.SHARE_WHATS_NEXT ?? '').trim() ||
       "Thank you! I'll edit the photos you chose and send you a message when they're ready. You'll download them from this same link, so keep it handy.",
-    // Grid thumbnail size (long edge) for the client page.
-    thumbMaxEdge: Number(process.env.SHARE_THUMB_MAX_EDGE ?? 480),
+    // Grid thumbnail size (long edge) for the client page. Rows run up to
+    // 440px tall, so 960 keeps tiles sharp on 2x screens.
+    thumbMaxEdge: Number(process.env.SHARE_THUMB_MAX_EDGE ?? 960),
   },
 
   // How the photos share is mounted on the owner's editing machine, so the

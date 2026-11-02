@@ -67,7 +67,9 @@ function previewsDirFor(id: string): string {
 
 /** Absolute path to a share's grid-thumbnail folder on disk. */
 function thumbsDirFor(id: string): string {
-  return path.join(config.dataDir, 'shares', id, 'thumbs');
+  // Keyed by size: changing SHARE_THUMB_MAX_EDGE starts a fresh folder, which
+  // thumb() fills lazily from the previews on first view.
+  return path.join(config.dataDir, 'shares', id, `thumbs-${config.shares.thumbMaxEdge}`);
 }
 
 /** Preview file (webp) basename for an original edited filename. */
