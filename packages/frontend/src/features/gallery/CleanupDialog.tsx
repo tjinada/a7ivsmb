@@ -30,11 +30,11 @@ export function CleanupDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/70 p-6"
+      className="fixed inset-0 z-[10001] flex overflow-y-auto bg-black/70 p-6 pt-[max(1.5rem,env(safe-area-inset-top))]"
       onClick={busy ? undefined : onCancel}
     >
       <div
-        className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-xl"
+        className="m-auto w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-base font-semibold text-gray-100">Delete low-rated photos</h3>

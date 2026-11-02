@@ -42,3 +42,9 @@ body {
     padding-right: env(safe-area-inset-right, 0px);
   }
 }
+
+/* iOS zooms the page when a focused field is under 16px, and the zoom sticks
+   after the dialog closes. Phones get 16px fields; desktop keeps the design size. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { font-size: 16px !important; }
+}
