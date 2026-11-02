@@ -10,6 +10,12 @@
   const app = document.getElementById('app');
   const COARSE = window.matchMedia('(pointer: coarse)').matches;
   const TAP = COARSE ? 'tap' : 'click';
+  // iPhone/iPad: the share sheet offers "Save Image(s)" straight into Photos.
+  // Android's share sheet has no "save to gallery", so it gets plain downloads.
+  const CAN_SHARE_FILES = COARSE && !/Android/i.test(navigator.userAgent) && !!navigator.share && !!navigator.canShare
+    && (() => { try { return navigator.canShare({ files: [new File([''], 'x.jpg', { type: 'image/jpeg' })] }); } catch (e) { return false; } })();
+  // Above this the originals are too much to hold in a phone tab: ZIP instead.
+  const SAVE_ALL_MAX_BYTES = 300 * 1024 * 1024;
 
   let state = null;        // SharePublicState from the server
   const favs = new Set();  // shortlist (filenames)
@@ -31,13 +37,17 @@
     next: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
     down: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"/></svg>',
     tick: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>',
+    share: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></svg>',
   };
 
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
   const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
-  const thumbUrl = (f) => API + '/thumb/' + encodeURIComponent(f);
-  const previewUrl = (f) => API + '/preview/' + encodeURIComponent(f);
+  // Previews/thumbs are re-rendered without the watermark on delivery and are
+  // cached for a day, so the delivery phase asks for a different URL.
+  const ver = () => (state && state.phase === 'delivery' ? '?v=d' : '');
+  const thumbUrl = (f) => API + '/thumb/' + encodeURIComponent(f) + ver();
+  const previewUrl = (f) => API + '/preview/' + encodeURIComponent(f) + ver();
   const downloadUrl = (f) => API + '/download/' + encodeURIComponent(f);
 
   function fmtBytes(n) {
@@ -177,7 +187,7 @@
       + '<button type="button" class="open" aria-label="Open photo ' + (index + 1) + '"></button>'
       + (o.heart ? '<button type="button" class="mark heart" aria-label="Add to shortlist" aria-pressed="' + on + '">' + ICON.heart + '</button>' : '')
       + (o.tick ? '<button type="button" class="mark tickbtn" aria-label="Choose" aria-pressed="' + on + '">' + ICON.tickDot + '</button>' : '')
-      + (o.save ? '<button type="button" class="save" aria-label="Save photo">' + ICON.down + 'Save</button>' : '')
+      + (o.save ? '<button type="button" class="save" aria-label="Save photo ' + (index + 1) + '"><span>' + ICON.down + '</span></button>' : '')
       + '</div>',
     );
     const img = tile.querySelector('img');
@@ -273,7 +283,7 @@
       + (o.eyebrow !== undefined
         ? '<span class="eyebrow">' + o.eyebrow + '</span>'
         : '<div class="brand"><span class="brand-mark" aria-hidden="true"></span>' + esc(state.brandName) + '</div>')
-      + '<h1>' + (o.title || esc(state.albumName)) + '</h1>'
+      + '<h1>' + (o.title || esc(state.title || state.albumName)) + '</h1>'
       + '<span class="sub">' + sub + '</span></div>'
       + (toolsHtml || '')
       + '</div>';
@@ -432,7 +442,7 @@
       '<div class="shell">'
       + header(sub,
         '<button type="button" class="pill wide-only" data-clear>Clear</button><div class="progress">' + finalCtaHtml() + '</div>',
-        { back: true, eyebrow: 'Step 2 of 2 · ' + esc(state.albumName), title })
+        { back: true, eyebrow: 'Step 2 of 2 · ' + esc(state.title || state.albumName), title })
       + '<div class="main"><div class="final-prog phone-only">' + finalProgHtml() + '<button type="button" class="pill" data-clear>Clear</button></div>'
       + '<p id="status" class="status above" aria-live="polite"></p>'
       + '<div class="grid" id="grid"></div></div>'
@@ -540,38 +550,183 @@
   }
 
   // ── Delivery ──────────────────────────────────────────────────────────────
+  /** "2026-10-31" -> "October 31, 2026" in the visitor's locale. */
+  function fmtDate(iso) {
+    if (!iso) return '';
+    const p = iso.split('-').map(Number);
+    return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+
   function renderDelivery() {
     // A download-everything share has no picks: every photo is downloadable.
     // A proofing share delivers only the client's final picks.
     const files = state.kind === 'delivery' ? state.items : state.items.filter((it) => it.final);
     const size = fmtBytes(state.downloadBytes);
-    const sub = 'Your final photos are ready · ' + plural(files.length, 'photo') + ' · full resolution';
-    const dl = '<a class="btn primary" href="' + API + '/download-all" download>' + ICON.down + 'Download all (' + files.length + (size ? ' · ' + size : '') + ')</a>';
+    const date = fmtDate(state.date);
+    const brand = esc(state.brandName);
+    const meta = plural(files.length, 'photo') + ' · full resolution';
     app.replaceChildren(el(
-      '<div class="shell">'
-      + header(sub, '<div class="progress"><div class="dl-wrap" style="margin:0">' + dl + '<span class="hint">One zip file, or save photos one at a time below.</span></div></div>')
-      + '<div class="main">'
-      + '<div class="dl-wrap phone-only">' + dl + '<span class="hint">One zip file' + (COARSE ? ' — on a phone, Wi‑Fi is a good idea' : '') + '. Or save photos one at a time below.</span></div>'
-      + '<div class="sec"><strong>Your photos</strong><span>' + (COARSE ? 'Tap a photo to view · Save keeps it on your phone' : 'Click a photo to view') + '</span></div>'
-      + '<div class="grid" id="grid"></div>'
-      + '<p id="status" class="status" aria-live="polite"></p>'
-      + '<p class="hint" style="margin-top:18px">Thank you for choosing ' + esc(state.brandName) + '</p>'
-      + '</div></div>',
+      '<div class="dv">'
+      + '<header class="hero">'
+      + (files.length ? '<img class="hero-img" alt="" fetchpriority="high" src="' + previewUrl(files[0].file) + '"/>' : '')
+      + '<div class="hero-brand">' + brand + '</div>'
+      + '<div class="hero-text"><h1>' + esc(state.title) + '</h1>' + (date ? '<p>' + esc(date) + '</p>' : '') + '</div>'
+      + '</header>'
+      + '<section class="dv-bar">'
+      + '<div class="dv-ident"><span class="dv-name">' + esc(state.title) + '</span><span class="dv-meta">' + meta + (size ? '<span class="wide-inline"> · ' + size + '</span>' : '') + '</span></div>'
+      + '<div class="dv-act" id="dvAct"></div>'
+      + '</section>'
+      + '<div class="main dv-main"><div class="grid" id="grid"></div><p id="status" class="status" aria-live="polite"></p></div>'
+      + '<footer class="dv-foot"><span class="rule" aria-hidden="true"></span><span class="brand-word">' + brand + '</span>'
+      + '<span class="muted">Thank you for choosing ' + brand + '</span></footer>'
+      + '</div>',
     ));
+    const hero = app.querySelector('.hero-img');
+    if (hero) { hero.onload = () => hero.classList.add('ok'); if (hero.complete) hero.classList.add('ok'); }
+
+    // One download button, chosen once: Save all to Photos where the share
+    // sheet can take the files and the set is small enough, otherwise the ZIP.
+    const act = document.getElementById('dvAct');
+    const zip = (note) => {
+      act.innerHTML = '<a class="btn primary dv-btn" href="' + API + '/download-all" download>' + ICON.down
+        + '<span>Download all' + (size ? ' · ' + size : '') + '</span></a>'
+        + (note ? '<p class="dv-note err">' + esc(note) + '</p>' : '');
+    };
+    if (CAN_SHARE_FILES && files.length && (state.downloadBytes || 0) <= SAVE_ALL_MAX_BYTES) {
+      SaveAll.mount(act, files.map((it) => it.file), (msg) => zip(msg + ' You can download them as one ZIP instead.'));
+    } else {
+      zip();
+    }
+
     grid = new Grid(document.getElementById('grid'), files, {
       save: true,
       onOpen: (file) => Lightbox.open(files.map((it) => it.file), file, 'download'),
     });
   }
 
-  /** Save one original. On touch devices use the share sheet (which offers
-   *  "Save Image"); elsewhere a plain download. */
+  // ── Save all to Photos (iPhone/iPad share sheet) ──────────────────────────
+  // Two taps by necessity: share() needs a fresh user gesture, and the first
+  // tap's has expired by the time the originals have downloaded. Tap 1 fetches
+  // them into memory with progress; tap 2 opens the share sheet, whose
+  // "Save N Images" puts them in Photos. States: idle → preparing → ready → done.
+  const SaveAll = (function () {
+    let root = null;
+    let names = [];
+    let st = 'idle';
+    let done = 0;
+    let files = null;      // File[] once ready; dropped with the page
+    let ctrl = null;       // AbortController while preparing
+    let cancelled = false;
+    let onFail = null;
+
+    function render() {
+      if (!root) return;
+      const n = names.length;
+      const pct = Math.round((done / Math.max(1, n)) * 100) + '%';
+      // While preparing, update in place so a tap on Cancel is never lost to a
+      // re-render between touchstart and click.
+      const live = root.querySelector('[data-prog]');
+      if (st === 'preparing' && live) {
+        root.querySelector('[data-lbl]').textContent = 'Preparing photos… ' + done + ' of ' + n;
+        live.style.width = pct;
+        return;
+      }
+      if (st === 'preparing') {
+        root.innerHTML = '<button type="button" class="btn dv-btn preparing" disabled>'
+          + '<span data-lbl>Preparing photos… ' + done + ' of ' + n + '</span><span class="dv-prog" data-prog style="width:' + pct + '"></span></button>'
+          + '<button type="button" class="linkbtn" data-cancel>Cancel</button>';
+      } else if (st === 'ready') {
+        root.innerHTML = '<button type="button" class="btn primary dv-btn" data-go>' + ICON.share + '<span>Save ' + plural(n, 'photo') + '</span></button>'
+          + '<p class="dv-note">In the share sheet, tap “' + (n === 1 ? 'Save Image' : 'Save ' + n + ' Images') + '”.</p>';
+      } else if (st === 'done') {
+        root.innerHTML = '<button type="button" class="btn dv-btn done" data-go>' + ICON.tick + '<span>Done</span></button>'
+          + '<p class="dv-note">Check your Photos app.</p>';
+      } else {
+        root.innerHTML = '<button type="button" class="btn primary dv-btn" data-start>' + ICON.down + '<span>Save all to Photos</span></button>';
+      }
+      const bind = (sel, fn) => { const b = root.querySelector(sel); if (b) b.onclick = fn; };
+      bind('[data-start]', start);
+      bind('[data-cancel]', cancel);
+      bind('[data-go]', share);
+    }
+
+    async function start() {
+      st = 'preparing';
+      done = 0;
+      cancelled = false;
+      ctrl = new AbortController();
+      const signal = ctrl.signal;
+      render();
+      try {
+        const got = new Array(names.length);
+        let next = 0;
+        const worker = async () => {
+          while (next < names.length) {
+            const i = next;
+            next += 1;
+            const r = await fetch(downloadUrl(names[i]), { credentials: 'same-origin', signal });
+            if (!r.ok) throw new Error('A photo couldn’t be downloaded.');
+            const blob = await r.blob();
+            got[i] = new File([blob], names[i], { type: blob.type || 'image/jpeg' });
+            done += 1;
+            render();
+          }
+        };
+        await Promise.all([worker(), worker(), worker()]);
+        if (!navigator.canShare({ files: got })) throw new Error('This phone can’t save that many photos at once.');
+        files = got;
+        st = 'ready';
+        render();
+      } catch (e) {
+        if (ctrl) ctrl.abort(); // stop the other workers
+        if (cancelled) { st = 'idle'; render(); } else fail(e && e.message ? e.message : 'Something went wrong.');
+      } finally {
+        ctrl = null;
+      }
+    }
+
+    function cancel() {
+      cancelled = true;
+      if (ctrl) ctrl.abort();
+    }
+
+    async function share() {
+      try {
+        await navigator.share({ files }); // files only: a title/text makes iOS offer to save that too
+        st = 'done';
+        render();
+      } catch (e) {
+        if (e && e.name === 'AbortError') return; // sheet dismissed: stay as we are
+        fail('The share sheet couldn’t open.');
+      }
+    }
+
+    function fail(msg) {
+      files = null;
+      st = 'idle';
+      if (onFail) onFail(msg);
+    }
+
+    function mount(el, list, failCb) {
+      root = el;
+      names = list;
+      files = null;
+      st = 'idle';
+      done = 0;
+      onFail = failCb;
+      render();
+    }
+
+    return { mount };
+  })();
+
+  /** Save one original. On iPhone/iPad use the share sheet (which offers
+   *  "Save Image"); elsewhere, Android included, a plain download. */
   async function saveFile(file, btn) {
     const label = btn ? btn.innerHTML : '';
-    if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
+    if (btn) { btn.disabled = true; if (!btn.classList.contains('save')) btn.textContent = 'Preparing…'; }
     try {
-      const canShare = COARSE && navigator.share && navigator.canShare;
-      if (!canShare) {
+      if (!CAN_SHARE_FILES) {
         const a = document.createElement('a');
         a.href = downloadUrl(file);
         a.download = file;
