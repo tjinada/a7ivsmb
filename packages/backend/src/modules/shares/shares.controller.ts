@@ -6,6 +6,15 @@ import { setShareCookie } from './shares.auth.js';
 import { sendSuccess } from '../../utils/response.js';
 import { AppError } from '../../middleware/index.js';
 
+/** Content-Disposition for a download: an ASCII fallback plus the UTF-8 name
+ *  (RFC 6266 / 5987), with characters filesystems reject stripped. */
+function attachment(name: string): string {
+  const safe = name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim() || 'photos';
+  const ascii = safe.replace(/[^\x20-\x7e]/g, '_');
+  const utf8 = encodeURIComponent(safe).replace(/['()*!]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${utf8}`;
+}
+
 /** Block caches on the gate, the JSON state, and all downloads. */
 function noStore(res: Response): void {
   res.set('Cache-Control', 'no-store');
@@ -175,9 +184,9 @@ export const sharesController = {
   async downloadAll(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       noStore(res);
-      const files = await sharesService.selectedForZip(req.params.slug);
+      const { title, files } = await sharesService.selectedForZip(req.params.slug);
       res.set('Content-Type', 'application/zip');
-      res.set('Content-Disposition', 'attachment; filename="selected.zip"');
+      res.set('Content-Disposition', attachment(`${title}.zip`));
       const archive = archiver('zip', { zlib: { level: 0 } });
       archive.on('error', (err) => res.destroy(err));
       archive.pipe(res);

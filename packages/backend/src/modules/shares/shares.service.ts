@@ -24,6 +24,7 @@ import {
 import { hashPassword, verifyPassword, newId, newSlug } from './shares.auth.js';
 import { progressStart, progressTick, progressEnd } from './shares.progress.js';
 import { compareNames } from '../../utils/naturalOrder.js';
+import { albumTitle } from './albumTitle.js';
 
 const JPG_EXTS = new Set(['.jpg', '.jpeg']);
 const EDITED_DIR = 'Edited';
@@ -179,6 +180,36 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 /** Regenerate the watermarked preview set for a share from its album's Edited/.
  *  When a progressId is supplied, done/total counts are published for the
  *  owner UI to poll; the entry lives exactly as long as this function runs. */
+/** Sharp decodes are memory-heavy: cap parallel renders at 4 (or the cores). */
+const RENDER_CONCURRENCY = Math.max(1, Math.min(os.cpus().length, 4));
+
+/** Render one edited JPG to its preview (webp, optionally watermarked) and grid
+ *  thumb, overwriting any existing files. Null if sharp can't decode it. */
+async function renderPreview(editedDir: string, name: string, dir: string, tdir: string, watermark: boolean): Promise<Rendered | null> {
+  const { previewMaxEdge, previewQuality } = config.shares;
+  const src = path.join(editedDir, name);
+  const out = path.join(dir, previewNameFor(name));
+  try {
+    // Two passes: resize first to learn the preview's real dimensions,
+    // then composite a watermark drawn at exactly that size (the diagonal
+    // text scales with each photo's aspect ratio).
+    const resized = await sharp(src, { failOn: 'none' })
+      .rotate()
+      .resize({ width: previewMaxEdge, height: previewMaxEdge, fit: 'inside', withoutEnlargement: true })
+      .withIccProfile('srgb') // convert wide-gamut (Adobe RGB etc.) exports to sRGB before compositing
+      .toBuffer({ resolveWithObject: true });
+    const preview = await sharp(resized.data)
+      .composite(watermark ? [{ input: watermarkSvg(resized.info.width, resized.info.height) }] : [])
+      .webp({ quality: previewQuality })
+      .toBuffer();
+    await fs.writeFile(out, preview);
+    await writeThumb(preview, path.join(tdir, previewNameFor(name)));
+    return { name, dims: { w: resized.info.width, h: resized.info.height } };
+  } catch {
+    return null; // sharp couldn't decode it; it just won't appear as a preview
+  }
+}
+
 async function generatePreviews(id: string, albumPath: string, progressId?: string, watermark = true): Promise<Rendered[]> {
   const items = await listEditedJpgs(albumPath);
   const dir = previewsDirFor(id);
@@ -190,35 +221,15 @@ async function generatePreviews(id: string, albumPath: string, progressId?: stri
   if (items.length === 0) return [];
 
   const editedDir = path.join(safeAlbumDir(albumPath), EDITED_DIR);
-  const { previewMaxEdge, previewQuality } = config.shares;
   if (progressId) progressStart(progressId, items.length);
   try {
     // Render previews concurrently across CPU cores (capped, since each
     // full-res decode holds memory). Order is preserved; files sharp can't
     // decode return null and are dropped, so the result reflects only
     // previews that landed.
-    const concurrency = Math.max(1, Math.min(os.cpus().length, 4));
-    const results = await mapLimit(items, concurrency, async (name) => {
-      const src = path.join(editedDir, name);
-      const out = path.join(dir, previewNameFor(name));
+    const results = await mapLimit(items, RENDER_CONCURRENCY, async (name) => {
       try {
-        // Two passes: resize first to learn the preview's real dimensions,
-        // then composite a watermark drawn at exactly that size (the diagonal
-        // text scales with each photo's aspect ratio).
-        const resized = await sharp(src, { failOn: 'none' })
-          .rotate()
-          .resize({ width: previewMaxEdge, height: previewMaxEdge, fit: 'inside', withoutEnlargement: true })
-          .withIccProfile('srgb') // convert wide-gamut (Adobe RGB etc.) exports to sRGB before compositing
-          .toBuffer({ resolveWithObject: true });
-        const preview = await sharp(resized.data)
-          .composite(watermark ? [{ input: watermarkSvg(resized.info.width, resized.info.height) }] : [])
-          .webp({ quality: previewQuality })
-          .toBuffer();
-        await fs.writeFile(out, preview);
-        await writeThumb(preview, path.join(tdir, previewNameFor(name)));
-        return { name, dims: { w: resized.info.width, h: resized.info.height } };
-      } catch {
-        return null; // sharp couldn't decode it; it just won't appear as a preview
+        return await renderPreview(editedDir, name, dir, tdir, watermark);
       } finally {
         if (progressId) progressTick(progressId); // counts processed, not just succeeded
       }
@@ -287,8 +298,11 @@ function toPublicState(rec: ShareRecord, downloadBytes?: number): SharePublicSta
     w: dims[file]?.w ?? 0,
     h: dims[file]?.h ?? 0,
   }));
+  const { title, date } = albumTitle(rec.albumName);
   return {
     albumName: rec.albumName,
+    title,
+    date,
     brandName: config.shares.brandName,
     whatsNext: config.shares.whatsNext,
     kind: kindOf(rec),
@@ -412,6 +426,14 @@ export const sharesService = {
     if (rec.phase === 'proofing') {
       throw new AppError('The client has not submitted their selection yet', 400);
     }
+    // The final picks are now the client's: re-render their previews and
+    // thumbs without the watermark, in place. Photos they didn't pick stay
+    // watermarked (they may be sold as extras later).
+    const editedDir = path.join(safeAlbumDir(rec.albumPath), EDITED_DIR);
+    await fs.mkdir(previewsDirFor(rec.id), { recursive: true });
+    await fs.mkdir(thumbsDirFor(rec.id), { recursive: true });
+    await mapLimit(finalOf(rec), RENDER_CONCURRENCY, (name) =>
+      renderPreview(editedDir, name, previewsDirFor(rec.id), thumbsDirFor(rec.id), false));
     const next: ShareRecord = { ...rec, phase: 'delivery' };
     await putShare(next);
     return toSummary(next);
@@ -564,8 +586,9 @@ export const sharesService = {
     return { stream: createReadStream(abs), name: file, size: stat.size, type: 'image/jpeg' };
   },
 
-  /** Resolve the selected full-res files for the zip-all download. */
-  async selectedForZip(slug: string): Promise<{ abs: string; name: string }[]> {
+  /** Resolve the selected full-res files for the zip-all download, plus the
+   *  display title the zip is named after. */
+  async selectedForZip(slug: string): Promise<{ title: string; files: { abs: string; name: string }[] }> {
     await loadShares();
     const rec = requireBySlug(slug);
     if (rec.phase !== 'delivery') throw new AppError('Downloads are not available yet', 403);
@@ -578,6 +601,6 @@ export const sharesService = {
       if (stat?.isFile()) out.push({ abs, name: file });
     }
     if (out.length === 0) throw new AppError('No files to download', 404);
-    return out;
+    return { title: albumTitle(rec.albumName).title, files: out };
   },
 };

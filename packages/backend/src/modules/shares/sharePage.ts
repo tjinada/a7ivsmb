@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ShareKind } from '@sonycam/shared';
 import { config } from '../../config/index.js';
+import { albumTitle } from './albumTitle.js';
 
 // client/ sits beside src/ and dist/, so this relative path resolves the same
 // under tsx (src/modules/shares) and node (dist/modules/shares).
@@ -55,7 +56,7 @@ function fill(tpl: string, vars: Record<string, string>): string {
 /** Render the full standalone client page for a share slug. */
 export async function renderSharePage(slug: string, meta: { albumName: string; kind: ShareKind }): Promise<string> {
   const brand = escAttr(config.shares.brandName);
-  const album = escAttr(meta.albumName);
+  const album = escAttr(albumTitle(meta.albumName).title);
   const title = `${album} — ${brand}`;
   const desc = meta.kind === 'delivery'
     ? 'Your photos are ready to view and download.'

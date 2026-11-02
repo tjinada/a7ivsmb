@@ -275,6 +275,8 @@ export interface SharePublicItem {
  *  Carries nothing about other shares and no secrets. */
 export interface SharePublicState {
   albumName: string;
+  title: string;            // album name without a leading shoot date (display)
+  date: string | null;      // ISO YYYY-MM-DD parsed from the album name, or null
   brandName: string;        // SHARE_BRAND_NAME; who the gallery is from
   whatsNext: string;        // SHARE_WHATS_NEXT; shown after the client submits
   kind: ShareKind;
