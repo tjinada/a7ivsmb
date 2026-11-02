@@ -30,7 +30,7 @@ function cardSvg(): string {
   <circle cx="600" cy="240" r="96" fill="none" stroke="#E3A33B" stroke-width="10" opacity="0.9"/>
   <circle cx="600" cy="240" r="58" fill="none" stroke="#ededed" stroke-width="6" opacity="0.5"/>
   <circle cx="600" cy="240" r="20" fill="#E3A33B" opacity="0.85"/>
-  <text x="600" y="432" text-anchor="middle" font-family="DejaVu Sans" font-size="${size}" font-weight="bold" fill="#ededed">${brand}</text>
+  ${brand ? `<text x="600" y="432" text-anchor="middle" font-family="DejaVu Sans" font-size="${size}" font-weight="bold" fill="#ededed">${brand}</text>` : ''}
   <text x="600" y="500" text-anchor="middle" font-family="DejaVu Sans" font-size="30" fill="#a3a3a3">A private gallery has been shared with you</text>
 </svg>`;
 }

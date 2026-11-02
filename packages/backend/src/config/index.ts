@@ -88,7 +88,7 @@ export const config = {
     cookieTtlDays: Number(process.env.SHARE_COOKIE_TTL_DAYS ?? 7),
     // Who the client page says the gallery is from, and what it tells them
     // after they submit their favourites. Plain text; the page escapes it.
-    brandName: (process.env.SHARE_BRAND_NAME ?? '').trim() || 'Your photographer',
+    brandName: (process.env.SHARE_BRAND_NAME ?? '').trim(),
     whatsNext:
       (process.env.SHARE_WHATS_NEXT ?? '').trim() ||
       "Thank you! I'll edit the photos you chose and send you a message when they're ready. You'll download them from this same link, so keep it handy.",

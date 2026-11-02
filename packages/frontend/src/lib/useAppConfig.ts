@@ -3,7 +3,7 @@ import type { ApiResponse, MeResponse } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { useAuthStore } from '@/stores/authStore';
 
-const FALLBACK: MeResponse = { username: '', brandName: 'Your photographer', pathPrefix: '' };
+const FALLBACK: MeResponse = { username: '', brandName: '', pathPrefix: '' };
 
 /**
  * Owner-app config from GET /api/auth/me (brand name, share mount path). The

@@ -216,6 +216,7 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 .linkbtn { align-self: center; background: none; border: 0; padding: 10px 8px; color: var(--text); font-size: 15px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border-strong); }
 .dv-main { padding: 24px 4px calc(var(--safe-bottom) + 8px); }
 .dv-foot { margin-top: 40px; padding: 40px 24px calc(var(--safe-bottom) + 56px); background: var(--surface); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+.dv-main:last-child { padding-bottom: calc(var(--safe-bottom) + 40px); } /* no footer when no brand */
 .dv-foot .rule { width: 24px; height: 1px; background: var(--accent); }
 .brand-word { font-family: var(--display); font-weight: 500; font-size: 12px; letter-spacing: .24em; text-transform: uppercase; }
 @media (min-width: 900px) {

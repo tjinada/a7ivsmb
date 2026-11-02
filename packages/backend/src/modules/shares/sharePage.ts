@@ -58,7 +58,7 @@ export async function renderSharePage(slug: string, meta: { albumName: string; k
   const brand = escAttr(config.shares.brandName);
   const shown = albumTitle(meta.albumName);
   const album = escAttr(shown.title);
-  const title = `${album} — ${brand}`;
+  const title = brand ? `${album} — ${brand}` : album;
   const desc = meta.kind === 'delivery'
     ? 'Your photos are ready to view and download.'
     : 'Your photos are ready — view the gallery and pick your favourites.';
@@ -66,8 +66,8 @@ export async function renderSharePage(slug: string, meta: { albumName: string; k
   // tags are omitted and the page still works.
   const base = config.shareHost ? `https://${config.shareHost}` : '';
   const og = base
-    ? `<meta property="og:type" content="website"/>
-<meta property="og:site_name" content="${brand}"/>
+    ? `<meta property="og:type" content="website"/>${brand ? `
+<meta property="og:site_name" content="${brand}"/>` : ''}
 <meta property="og:title" content="${album}"/>
 <meta property="og:description" content="${desc}"/>
 <meta property="og:url" content="${base}/s/${escAttr(slug)}"/>
@@ -91,8 +91,9 @@ export async function renderSharePage(slug: string, meta: { albumName: string; k
  *  existed — indistinguishable once the record is deleted). No JS, no slug
  *  echo; same styling as the gate so it reads as part of the same product. */
 export async function renderInactivePage(): Promise<string> {
+  const brand = escAttr(config.shares.brandName);
   return fill(await template('inactive.html'), {
-    BRAND: escAttr(config.shares.brandName),
+    BRAND_LINE: brand ? `<div class="brand">${brand}</div>` : '',
     ASSET_V: SHARE_ASSET_VERSION,
   });
 }

@@ -27,7 +27,7 @@ export function SettingsPage() {
       <h1 className="mb-4 text-lg font-semibold">Settings</h1>
 
       <div className="rounded-xl border border-border bg-surface p-4 text-sm">
-        <Row label="Brand" value={brandName} />
+        <Row label="Brand" value={brandName || 'Not set'} />
         <Row label="Signed in as" value={user?.username ?? '—'} />
         <Row label="App version" value={__APP_VERSION__} />
       </div>

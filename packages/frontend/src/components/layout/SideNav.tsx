@@ -24,7 +24,7 @@ export function SideNav() {
     <aside className="hidden w-[240px] flex-none flex-col border-r border-border bg-base px-3.5 py-6 md:flex">
       <div className="flex items-center gap-2.5 px-2.5 pb-6">
         <BrandMark />
-        <span className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">{brandName}</span>
+        {brandName && <span className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">{brandName}</span>}
       </div>
 
       <nav className="flex flex-col gap-1.5">

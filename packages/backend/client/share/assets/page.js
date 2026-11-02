@@ -112,12 +112,12 @@
 
   // ── Gate ──────────────────────────────────────────────────────────────────
   function renderGate() {
-    const brand = document.body.dataset.brand || 'Your photographer';
+    const brand = document.body.dataset.brand || '';
     const album = document.body.dataset.album || 'Private gallery';
     const date = fmtDate(document.body.dataset.date);
     app.replaceChildren(el(
       '<div class="gate">'
-      + '<div class="brand">' + esc(brand) + '</div>'
+      + (brand ? '<div class="brand">' + esc(brand) + '</div>' : '')
       + '<div class="card">'
       + '<div class="intro">' + (date ? '<p class="gate-date">' + esc(date) + '</p>' : '')
       + '<h1 class="gate-title">' + esc(album) + '</h1><span class="rule" aria-hidden="true"></span>'
@@ -287,7 +287,7 @@
       + '<div class="ident">'
       + (o.eyebrow !== undefined
         ? '<span class="eyebrow">' + o.eyebrow + '</span>'
-        : '<div class="brand"><span class="brand-mark" aria-hidden="true"></span>' + esc(state.brandName) + '</div>')
+        : (state.brandName ? '<div class="brand"><span class="brand-mark" aria-hidden="true"></span>' + esc(state.brandName) + '</div>' : ''))
       + '<h1>' + (o.title || esc(state.title || state.albumName)) + '</h1>'
       + '<span class="sub">' + sub + '</span></div>'
       + (toolsHtml || '')
@@ -574,7 +574,7 @@
       '<div class="dv">'
       + '<header class="hero">'
       + (files.length ? '<img class="hero-img" alt="" fetchpriority="high" src="' + previewUrl(files[0].file) + '"/>' : '')
-      + '<div class="hero-brand">' + brand + '</div>'
+      + (brand ? '<div class="hero-brand">' + brand + '</div>' : '')
       + '<div class="hero-text"><h1>' + esc(state.title) + '</h1>' + (date ? '<p>' + esc(date) + '</p>' : '') + '</div>'
       + '</header>'
       + '<section class="dv-bar">'
@@ -582,8 +582,8 @@
       + '<div class="dv-act" id="dvAct"></div>'
       + '</section>'
       + '<div class="main dv-main"><div class="grid" id="grid"></div><p id="status" class="status" aria-live="polite"></p></div>'
-      + '<footer class="dv-foot"><span class="rule" aria-hidden="true"></span><span class="brand-word">' + brand + '</span>'
-      + '<span class="muted">Thank you for choosing ' + brand + '</span></footer>'
+      + (brand ? '<footer class="dv-foot"><span class="rule" aria-hidden="true"></span><span class="brand-word">' + brand + '</span>'
+        + '<span class="muted">Thank you for choosing ' + brand + '</span></footer>' : '')
       + '</div>',
     ));
     const hero = app.querySelector('.hero-img');
