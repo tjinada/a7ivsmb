@@ -1,22 +1,29 @@
-/* Client share page. Dark only, neutral greys, one amber accent. The photos
-   are the colour; everything else stays out of the way. */
+/* Client share page. Light: warm off-white ground, near-black ink, one muted
+   gold accent. The photos are the colour; everything else stays out of the
+   way. The lightbox keeps its own dark palette (photos read best on dark). */
 
 @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/inter-latin-400-normal.woff2) format('woff2'); }
 @font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/inter-latin-500-normal.woff2) format('woff2'); }
 @font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/inter-latin-600-normal.woff2) format('woff2'); }
+/* Archivo at width 125 / weight 500, static latin instance (OFL, see LICENSE-Archivo.txt). Display only: brand + hero title. */
+@font-face { font-family: 'Archivo Expanded'; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/archivo-expanded-latin-500.woff2) format('woff2'); }
 
 :root {
-  --bg: #121212;
-  --surface: #1c1c1c;
-  --border: #2a2a2a;
-  --border-strong: #3a3a3a;
-  --text: #ededed;
-  --muted: #a3a3a3;
-  --faint: #6f6f6f;
-  --accent: #E3A33B;
-  --on-accent: #121212;
-  --danger: #ff7a7a;
-  --tile: #262626;
+  --bg: #FAF8F5;
+  --surface: #F1EDE7;
+  --border: #E4DFD7;
+  --border-strong: #D3CCC1;
+  --text: #1C1B19;
+  --muted: #5E5A54;
+  --faint: #6E6A63;
+  --primary: #1C1B19;
+  --on-primary: #FAF8F5;
+  --accent: #B8863B;
+  --on-accent: #FFFFFF;
+  --danger: #B3261E;
+  --tile: #E9E4DC;
+  --hover: rgba(28, 27, 25, .06);
+  --display: 'Archivo Expanded', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -32,19 +39,19 @@ h1, h2, p { margin: 0; }
 img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none; }
 
 /* ── Brand line ─────────────────────────────────────────────────────────── */
-.brand { display: flex; align-items: center; gap: 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 11px; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
 .brand-mark { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--accent); position: relative; flex: none; }
 .brand-mark::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--accent); }
 
 /* ── Buttons ────────────────────────────────────────────────────────────── */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 20px; border-radius: 12px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font-size: 15px; font-weight: 600; text-decoration: none; white-space: nowrap; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 .btn.block { width: 100%; }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn svg { flex: none; }
 .pill { height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--border-strong); background: transparent; color: var(--text); font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
-.pill.on { background: var(--text); border-color: var(--text); color: var(--on-accent); font-weight: 600; }
-.icon-btn { width: 44px; height: 44px; border-radius: 22px; border: 0; background: rgba(255,255,255,.08); color: var(--text); display: inline-flex; align-items: center; justify-content: center; }
+.pill.on { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+.icon-btn { width: 44px; height: 44px; border-radius: 22px; border: 0; background: var(--hover); color: var(--text); display: inline-flex; align-items: center; justify-content: center; }
 
 /* ── Gate / static cards ────────────────────────────────────────────────── */
 .gate { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; padding: calc(var(--safe-top) + 28px) 24px calc(var(--safe-bottom) + 32px); }
@@ -92,7 +99,7 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 /* ── Justified grid ─────────────────────────────────────────────────────── */
 .grid { display: flex; flex-direction: column; gap: 4px; }
 .row { display: flex; gap: 4px; }
-.tile { position: relative; flex: none; border-radius: 6px; overflow: hidden; background: var(--tile); padding: 0; border: 0; display: block; cursor: pointer; }
+.tile { position: relative; flex: none; border-radius: 0; overflow: hidden; background: var(--tile); padding: 0; border: 0; display: block; cursor: pointer; }
 .tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .25s; }
 .tile img.ok { opacity: 1; }
 .tile .open { position: absolute; inset: 0; border: 0; padding: 0; background: transparent; cursor: pointer; }
@@ -109,10 +116,10 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 .on .dot svg { opacity: 1; }
 .tile.pick img { transition: opacity .25s, filter .2s; }
 .tile.pick:not(.on) img.ok { opacity: .55; }
-.tile.pick.on::after { content: ''; position: absolute; inset: 0; border-radius: 6px; box-shadow: inset 0 0 0 2px var(--accent); pointer-events: none; }
+.tile.pick.on::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 2px var(--accent); pointer-events: none; }
 .grid.dim .tile img.ok { opacity: .6; }
 .sec.dim { color: var(--faint); }
-.tile .save { position: absolute; right: 6px; bottom: 6px; height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: rgba(18,18,18,.78); color: var(--text); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.tile .save { position: absolute; right: 6px; bottom: 6px; height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: rgba(250,248,245,.9); color: var(--text); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
 @media (min-width: 900px) {
   .grid, .row { gap: 6px; }
   .tile .mark { top: 6px; right: 6px; width: 44px; height: 44px; }
@@ -133,7 +140,7 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 .wide-only { display: none !important; }
 @media (min-width: 900px) {
   .head.with-back { padding-left: 28px; }
-  .head .back { background: rgba(255,255,255,.06); align-self: center; }
+  .head .back { background: var(--hover); align-self: center; }
   .wide-only { display: inline-flex !important; }
 }
 
@@ -154,14 +161,19 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 @media (min-width: 900px) { .info, .dl-wrap { margin-left: 0; margin-right: 0; } }
 
 /* ── Modal ──────────────────────────────────────────────────────────────── */
-.overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.65); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.overlay { position: fixed; inset: 0; z-index: 100; background: rgba(28,27,25,.45); display: flex; align-items: center; justify-content: center; padding: 24px; }
 .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; max-width: 360px; width: 100%; display: flex; flex-direction: column; gap: 12px; }
 .modal h2 { font-size: 18px; font-weight: 600; }
 .modal .actions { display: flex; gap: 10px; margin-top: 6px; }
 .modal .actions .btn { flex: 1; }
 
 /* ── Lightbox ───────────────────────────────────────────────────────────── */
-.lb { position: fixed; inset: 0; z-index: 200; background: #0a0a0a; display: flex; flex-direction: column; }
+.lb {
+  /* The viewer stays dark: re-point the tokens it uses. */
+  --text: #ededed; --muted: #a3a3a3; --faint: #8a8a8a; --surface: #1c1c1c; --border-strong: #3a3a3a;
+  --primary: #FAF8F5; --on-primary: #1C1B19; --danger: #ff8a80; --hover: rgba(255,255,255,.08);
+  position: fixed; inset: 0; z-index: 200; background: #0a0a0a; display: flex; flex-direction: column;
+}
 .lb-top { display: flex; align-items: center; gap: 12px; padding: calc(var(--safe-top) + 8px) 12px 8px; color: var(--muted); font-size: 14px; font-weight: 500; }
 .lb-top .cnt { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; font-weight: 600; }
 .lb-top .cnt svg { width: 14px; height: 14px; fill: var(--accent); }
@@ -174,10 +186,10 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 .lb-tip { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-size: 12px; color: var(--faint); pointer-events: none; }
 .lb-bottom { padding: 12px 16px calc(var(--safe-bottom) + 14px); display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .lb-bottom .btn { width: 100%; max-width: 420px; min-height: 56px; border-radius: 14px; font-size: 16px; }
-.lb-bottom .btn.act svg { width: 22px; height: 22px; fill: var(--on-accent); }
+.lb-bottom .btn.act svg { width: 22px; height: 22px; fill: var(--on-primary); }
 .lb-bottom .btn.act.off { background: var(--surface); border-color: var(--border-strong); color: var(--text); }
 .lb-bottom .btn.act.select.off svg { fill: none; stroke: var(--text); stroke-width: 1.8; }
-.lb-bottom .btn.act.final .dot { width: 24px; height: 24px; box-shadow: none; border-color: var(--on-accent); background: var(--on-accent); color: var(--accent); }
+.lb-bottom .btn.act.final .dot { width: 24px; height: 24px; box-shadow: none; border-color: var(--on-primary); background: var(--on-primary); color: var(--primary); }
 .lb-bottom .btn.act.final .dot svg { width: 14px; height: 14px; fill: none; opacity: 1; stroke: currentColor; }
 .lb-bottom .btn.act.final.off .dot { background: transparent; border-color: var(--text); }
 .lb-bottom .btn.act.final.off .dot svg { opacity: 0; }
