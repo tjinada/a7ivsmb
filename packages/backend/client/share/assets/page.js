@@ -37,7 +37,6 @@
     next: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
     down: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"/></svg>',
     tick: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>',
-    share: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></svg>',
   };
 
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -636,8 +635,7 @@
           + '<span data-lbl>Preparing photos… ' + done + ' of ' + n + '</span><span class="dv-prog" data-prog style="width:' + pct + '"></span></button>'
           + '<button type="button" class="linkbtn" data-cancel>Cancel</button>';
       } else if (st === 'ready') {
-        root.innerHTML = '<button type="button" class="btn primary dv-btn" data-go>' + ICON.share + '<span>Save ' + plural(n, 'photo') + '</span></button>'
-          + '<p class="dv-note">In the share sheet, tap “' + (n === 1 ? 'Save Image' : 'Save ' + n + ' Images') + '”.</p>';
+        root.innerHTML = '<button type="button" class="btn primary dv-btn" data-go>' + ICON.down + '<span>Ready — save ' + plural(n, 'photo') + '</span></button>';
       } else if (st === 'done') {
         root.innerHTML = '<button type="button" class="btn dv-btn done" data-go>' + ICON.tick + '<span>Done</span></button>'
           + '<p class="dv-note">Check your Photos app.</p>';
