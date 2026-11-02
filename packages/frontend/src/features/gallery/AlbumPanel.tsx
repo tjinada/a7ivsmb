@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy, Send, Loader2, Share2 } from 'lucide-react';
+import { Check, Copy, Send, Loader2 } from 'lucide-react';
 import type { GalleryItem, ShareSummary } from '@sonycam/shared';
 import { useAppConfig } from '@/lib/useAppConfig';
-import { fmtAgo } from '@/lib/dates';
 import { toast } from '@/components/Toast';
 import { useShareActions } from '@/features/shares/useShareActions';
 import { EditedUpload } from './EditedUpload';
@@ -14,6 +13,7 @@ export type AlbumTab = 'picks' | 'shortlist' | 'edited' | 'all';
 const PILL_ON = 'h-8 rounded-full bg-gray-100 px-3 text-xs font-semibold text-on-accent';
 const PILL = 'h-8 rounded-full border border-border-strong px-3 text-xs font-medium text-gray-200 transition hover:bg-surface';
 const BTN = 'flex items-center gap-1.5 rounded-lg border border-border-strong px-3 py-1.5 text-xs font-medium text-gray-200 transition hover:bg-surface disabled:opacity-50';
+const ICON_BTN = 'flex h-8 w-8 flex-none items-center justify-center rounded-lg text-gray-400 transition hover:bg-surface hover:text-gray-200';
 
 /** Folder path on the editing machine for an album's Edited/ folder. */
 function editedPath(prefix: string, albumName: string): string {
@@ -101,12 +101,12 @@ export function AlbumPanel({
     catch { window.prompt('Copy this path', p); }
   };
 
-  const phaseTile = !share
-    ? { label: 'Not shared', sub: 'Create a client link', hot: false }
-    : share.kind === 'delivery' ? { label: 'Download link', sub: `${share.previewCount} photos`, hot: false }
-      : share.phase === 'submitted' ? { label: 'Picks in', sub: `${share.finalCount} of ${share.cap} · ${fmtAgo(share.submittedAt ?? share.createdAt)}`, hot: true }
-        : share.phase === 'delivery' ? { label: 'Delivered', sub: `${share.finalCount} photos`, hot: false }
-          : { label: 'Awaiting picks', sub: share.selectedCount > 0 ? `${share.selectedCount} shortlisted so far` : 'no picks yet', hot: false };
+  // One line saying where the album stands; the tabs below carry the counts.
+  const status = !share
+    ? counts.edited > 0 ? `Not shared · ${counts.edited} edited` : 'Not shared · no edits yet'
+    : share.kind === 'delivery' ? `Download link · ${share.previewCount} photos`
+      : share.phase === 'delivery' ? `Delivered · ${share.finalCount} photos`
+        : share.selectedCount > 0 ? `Waiting on picks · ${share.selectedCount} shortlisted` : 'Waiting on picks';
 
   const tabs = (
     <div className="flex flex-wrap gap-2">
@@ -118,16 +118,7 @@ export function AlbumPanel({
   );
 
   return (
-    <div className="mb-4 space-y-3">
-      <div className="grid grid-cols-3 gap-2">
-        <Stat value={panel.hasSelected ? String(counts.all) : '—'} label={panel.hasSelected ? 'shots' : 'no originals'} />
-        <Stat value={String(counts.edited)} label="edited" />
-        <div className={`rounded-xl border p-3 ${phaseTile.hot ? 'border-primary-500 bg-primary-500/10' : 'border-border bg-surface'}`}>
-          <p className={`text-sm font-semibold leading-tight ${phaseTile.hot ? 'text-primary-400' : 'text-gray-100'}`}>{phaseTile.label}</p>
-          <p className="mt-0.5 truncate text-[11px] text-gray-400">{phaseTile.sub}</p>
-        </div>
-      </div>
-
+    <div className="mb-3 space-y-3">
       {proofing && share.phase === 'submitted' ? (
         <div className="rounded-2xl border border-border bg-surface p-3">
           <Step n={1} done={allEdited} title={`Edit the ${share.final.length} pick${share.final.length === 1 ? '' : 's'}`}
@@ -150,21 +141,14 @@ export function AlbumPanel({
           </Step>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
-          <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-primary-500/15 text-primary-400"><Share2 className="h-5 w-5" /></span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-gray-100">{share ? 'Client link' : 'Share with client'}</p>
-            <p className="text-[11px] text-gray-500">
-              {share ? (share.phase === 'delivery' ? 'Delivered · client can download' : 'Waiting on the client’s picks') : 'Upload your edits, then send a link to pick favourites.'}
-            </p>
-          </div>
-          <EditedUpload albumName={albumName} onUploaded={() => { panel.refetch(); if (share) void actions.refresh(share); }} label="Upload" tone="subtle" />
+        <div className="flex items-center gap-2">
+          <p className="min-w-0 flex-1 truncate text-xs text-gray-400">{status}</p>
           {pathPrefix && (
-            <button type="button" onClick={copyPath} className={BTN} title={editedPath(pathPrefix, albumName)}>
-              {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? 'Copied' : 'Folder path'}
+            <button type="button" onClick={copyPath} aria-label="Copy folder path" title={editedPath(pathPrefix, albumName)} className={ICON_BTN}>
+              {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
             </button>
           )}
+          <EditedUpload albumName={albumName} onUploaded={() => { panel.refetch(); if (share) void actions.refresh(share); }} label="Upload" tone="subtle" />
           {share ? (
             <Link to={`/clients?album=${encodeURIComponent(share.albumPath)}`} className={BTN}>Manage</Link>
           ) : (
@@ -176,15 +160,6 @@ export function AlbumPanel({
       )}
 
       {tabs}
-    </div>
-  );
-}
-
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-surface p-3">
-      <p className="text-xl font-semibold leading-tight text-gray-100">{value}</p>
-      <p className="mt-0.5 text-[11px] text-gray-400">{label}</p>
     </div>
   );
 }

@@ -279,7 +279,8 @@ export function GalleryPage() {
         menu={menu}
       />
 
-      {allItems.length > 0 && !selecting && !isEditedFolder && (
+      {/* Rating/type filters are for shoot folders; albums hold the keepers and edits. */}
+      {allItems.length > 0 && !selecting && !path.startsWith('Albums') && (
         <FilterBar ratingMin={ratingMin} onRatingMin={setRatingMin} typeFilter={typeFilter} onTypeFilter={setTypeFilter} />
       )}
 
