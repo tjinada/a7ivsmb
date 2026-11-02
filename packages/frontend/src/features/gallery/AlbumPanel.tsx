@@ -16,7 +16,7 @@ const PILL = 'h-8 rounded-full border border-border-strong px-3 text-xs font-med
 const BTN = 'flex items-center gap-1.5 rounded-lg border border-border-strong px-3 py-1.5 text-xs font-medium text-gray-200 transition hover:bg-surface disabled:opacity-50';
 
 /** Folder path on the editing machine for an album's Edited/ folder. */
-export function editedPath(prefix: string, albumName: string): string {
+function editedPath(prefix: string, albumName: string): string {
   const sep = prefix.includes('\\') ? '\\' : '/';
   return `${prefix.replace(/[\\/]+$/, '')}${sep}Albums${sep}${albumName}${sep}Edited`;
 }
@@ -81,13 +81,11 @@ export function useAlbumPanel(albumPath: string, shares: ShareSummary[]) {
 }
 
 export function AlbumPanel({
-  albumName, panel, onCreateShare, tabsOnly = false,
+  albumName, panel, onCreateShare,
 }: {
   albumName: string;
   panel: ReturnType<typeof useAlbumPanel>;
   onCreateShare: () => void;
-  /** The album belongs to a workflow job, whose card owns status and actions. */
-  tabsOnly?: boolean;
 }) {
   const { pathPrefix } = useAppConfig();
   const actions = useShareActions();
@@ -118,8 +116,6 @@ export function AlbumPanel({
       {panel.hasSelected && <Pill on={tab === 'all'} onClick={() => setTab('all')}>All · {counts.all}</Pill>}
     </div>
   );
-
-  if (tabsOnly) return <div className="mb-4">{tabs}</div>;
 
   return (
     <div className="mb-4 space-y-3">

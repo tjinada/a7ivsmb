@@ -1,3 +1,5 @@
+> **Retired (Nov 2026).** The guided workflow was removed in favour of the plain flow: rate, create the album, edit Selected, share. The rating screen (formerly "cull") stays as the shoot photo viewer.
+
 # Phase 9 — Guided workflow (jobs)
 
 **Draft for approval.** One dated folder becomes one *job* that walks the

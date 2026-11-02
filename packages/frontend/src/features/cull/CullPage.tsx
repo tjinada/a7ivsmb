@@ -416,9 +416,9 @@ export function CullPage() {
           <X className="h-[18px] w-[18px]" />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold">Culling {prettyDate(title, false)}</p>
+          <p className="truncate text-[13px] font-semibold">{prettyDate(title, false)}</p>
           <p className="truncate text-xs text-gray-400">
-            {total === 0 ? 'Nothing to cull' : `${Math.min((idx ?? 0) + 1, total)} / ${total} · ${tallies.unrated} to go`}
+            {total === 0 ? 'No photos' : `${Math.min((idx ?? 0) + 1, total)} / ${total}`}
             {total > 0 && (
               <span className="sm:hidden"> · <span className="text-primary-500">★5</span> {tallies.five} · <span className="text-red-400">✕</span> {tallies.rejected}</span>
             )}
@@ -753,7 +753,7 @@ function DoneCard({ tallies, total, onDelete, onExit, onReview }: {
 }) {
   return (
     <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 text-center">
-      <p className="text-lg font-semibold">{total === 0 ? 'Nothing to cull here' : 'That’s the lot'}</p>
+      <p className="text-lg font-semibold">{total === 0 ? 'No photos here' : 'That’s the lot'}</p>
       {total > 0 && (
         <p className="mt-1 text-sm text-gray-400">
           {tallies.five} five-star · {tallies.four} four-star · {tallies.rejected} rejected{tallies.unrated > 0 && ` · ${tallies.unrated} skipped`}

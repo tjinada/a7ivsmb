@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Loader2, Share2 } from 'lucide-react';
 import { useAlbums, useShares } from '@/features/gallery/api';
-import { useJobs } from '@/features/jobs/api';
 import { useShareActions } from './useShareActions';
 import { ClientCard, groupByAlbum, type LinkState } from './ClientCard';
 
@@ -16,7 +15,6 @@ const PILL = 'h-8 rounded-full border border-border-strong px-3 text-xs font-med
 export function SharesPage() {
   const sharesQuery = useShares();
   const albums = useAlbums().data;
-  const jobs = useJobs().data;
   const actions = useShareActions();
   const [params] = useSearchParams();
   const [filter, setFilter] = useState<Filter>('all');
@@ -26,7 +24,6 @@ export function SharesPage() {
   const shares = sharesQuery.data ?? [];
   const groups = useMemo(() => groupByAlbum(shares), [shares]);
   const edited = useMemo(() => new Map((albums ?? []).map((a) => [a.path, a.edited])), [albums]);
-  const jobFor = useMemo(() => new Map((jobs ?? []).filter((j) => j.albumPath).map((j) => [j.albumPath as string, j])), [jobs]);
 
   const counts: Record<Filter, number> = { all: groups.length, 'needs-you': 0, picking: 0, delivered: 0 };
   groups.forEach((g) => { counts[g.state] += 1; });
@@ -71,7 +68,6 @@ export function SharesPage() {
               group={g}
               actions={actions}
               editedInAlbum={albums ? edited.get(g.albumPath) : undefined}
-              job={jobFor.get(g.albumPath)}
               defaultOpen={g.albumPath === focusAlbum}
             />
           ))

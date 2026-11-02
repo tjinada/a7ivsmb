@@ -6,7 +6,7 @@ import { NAV, useNavBadges } from './nav';
 
 /**
  * Desktop navigation: a fixed-width sidebar with the brand, the sections, the
- * Jobs/Shares badges, and the FTP receiver's state at the foot. Rendered at md+ only;
+ * client badge, and the FTP receiver's state at the foot. Rendered at md+ only;
  * phones get the TabBar.
  */
 export function SideNav() {

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Copy, Check, Send, Loader2, MoreHorizontal, Heart, Download, RefreshCw, FolderOpen, Power, Eye, Sparkles,
 } from 'lucide-react';
-import type { JobSummary, ShareSummary } from '@sonycam/shared';
+import type { ShareSummary } from '@sonycam/shared';
 import { AuthImage } from '@/features/gallery/AuthImage';
 import { thumbUrl } from '@/features/gallery/mediaUrl';
 import { ConfirmDialog } from '@/features/gallery/ConfirmDialog';
@@ -51,10 +51,6 @@ export function groupByAlbum(shares: ShareSummary[]): AlbumGroup[] {
     .sort((a, b) => RANK[a.state] - RANK[b.state] || b.lastActivity - a.lastActivity);
 }
 
-const STEP_CHIP: Record<JobSummary['step'], string> = {
-  cull: '① Cull', edit: '② Edit', pick: '③ Picks', deliver: '④ Send', done: 'Delivered',
-};
-
 function statusPill(g: AlbumGroup): { text: string; cls: string } {
   const s = g.links[0];
   if (g.state === 'needs-you') return { text: `Picks in · ${s.finalCount} of ${s.cap}`, cls: 'bg-primary-500/15 text-primary-400' };
@@ -74,13 +70,12 @@ function linkLine(s: ShareSummary): string {
 const BTN = 'flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border-strong px-2.5 py-1.5 text-xs font-medium text-gray-200 transition hover:bg-base disabled:opacity-50';
 
 export function ClientCard({
-  group: g, actions: a, editedInAlbum, job, defaultOpen = false,
+  group: g, actions: a, editedInAlbum, defaultOpen = false,
 }: {
   group: AlbumGroup;
   actions: Actions;
   /** Photos currently in the album's Edited/ (undefined while unknown). */
   editedInAlbum?: number;
-  job?: JobSummary;
   defaultOpen?: boolean;
 }) {
   const proofing = g.links.find((s) => s.kind !== 'delivery');
@@ -145,11 +140,6 @@ export function ClientCard({
             <Link to={`/gallery?path=${encodeURIComponent(g.albumPath)}`} className="truncate text-[15px] font-semibold text-gray-100 hover:underline">
               {g.albumName}
             </Link>
-            {job && (
-              <Link to={`/gallery?path=${encodeURIComponent(g.albumPath)}`} className="flex-none rounded-md border border-border-strong px-1.5 text-[11px] font-medium text-gray-400 hover:text-gray-200" title="This album's shoot">
-                Shoot · {STEP_CHIP[job.step]}
-              </Link>
-            )}
           </div>
           <p className="mt-1 truncate text-xs text-gray-500">
             {compact ? linkLine(g.links[0]) : `${g.links.length} link${g.links.length === 1 ? '' : 's'} · last activity ${fmtAgo(g.lastActivity)}`}

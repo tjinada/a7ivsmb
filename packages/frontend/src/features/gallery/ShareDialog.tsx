@@ -16,19 +16,13 @@ export function ShareDialog({
   albumPath,
   albumName,
   onClose,
-  fixedKind,
-  onCreated,
 }: {
   albumPath: string;
   albumName: string;
   onClose: () => void;
-  /** Lock the share type (the workflow already knows which one it needs). */
-  fixedKind?: ShareKind;
-  /** Called once the link exists, before the dialog shows it. */
-  onCreated?: (share: ShareCreateResult) => void;
 }) {
   const qc = useQueryClient();
-  const [kind, setKind] = useState<ShareKind>(fixedKind ?? 'proofing');
+  const [kind, setKind] = useState<ShareKind>('proofing');
   const [cap, setCap] = useState(30);
   const [password, setPassword] = useState('');
   const [created, setCreated] = useState<ShareCreateResult | null>(null);
@@ -50,7 +44,6 @@ export function ShareDialog({
     onSuccess: (data) => {
       setCreated(data);
       qc.invalidateQueries({ queryKey: ['shares'] });
-      onCreated?.(data);
     },
   });
 
@@ -108,7 +101,6 @@ export function ShareDialog({
               )}
             </p>
 
-            {!fixedKind && <>
             <p className="mb-1.5 mt-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
               Share type
             </p>
@@ -128,7 +120,6 @@ export function ShareDialog({
                 Download all
               </button>
             </div>
-            </>}
 
             {kind === 'proofing' && (
               <>

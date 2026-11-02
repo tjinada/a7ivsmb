@@ -5,7 +5,6 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { GalleryPage } from '@/features/gallery/GalleryPage';
 import { TransfersPage } from '@/features/transfers/TransfersPage';
 import { SharesPage } from '@/features/shares/SharesPage';
-import { JobsPage } from '@/features/jobs/JobsPage';
 import { CullPage } from '@/features/cull/CullPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { PWAUpdatePrompt, InstallPrompt, OfflineIndicator } from '@/components/pwa';
@@ -31,7 +30,7 @@ export default function App() {
       {token ? (
         <BrowserRouter>
           <Routes>
-            {/* Cull mode is full-screen: no header or tab bar. */}
+            {/* The photo viewer is full-screen: no header or tab bar. */}
             <Route path="/cull" element={<CullPage />} />
             <Route
               path="*"
@@ -40,10 +39,8 @@ export default function App() {
                   <Routes>
                     <Route path="/" element={<Navigate to="/gallery" replace />} />
                     <Route path="/gallery" element={<GalleryPage />} />
-                    <Route path="/shoots" element={<JobsPage />} />
                     <Route path="/clients" element={<SharesPage />} />
                     {/* Old names, kept so bookmarks and installed shortcuts still land. */}
-                    <Route path="/jobs" element={<Redirect to="/shoots" />} />
                     <Route path="/shares" element={<Redirect to="/clients" />} />
                     <Route path="/transfers" element={<TransfersPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
