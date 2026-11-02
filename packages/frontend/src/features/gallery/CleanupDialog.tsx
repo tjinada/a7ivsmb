@@ -30,7 +30,7 @@ export function CleanupDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[10001] flex overflow-y-auto bg-black/70 p-6 pt-[max(1.5rem,env(safe-area-inset-top))]"
+      className="fixed inset-x-0 top-[var(--vv-top,0px)] z-[10001] flex h-[var(--vv-height,100dvh)] overflow-y-auto bg-black/70 p-6 pt-[max(1.5rem,env(safe-area-inset-top))]"
       onClick={busy ? undefined : onCancel}
     >
       <div
