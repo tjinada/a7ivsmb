@@ -27,7 +27,11 @@ function editedPath(prefix: string, albumName: string): string {
  * `items`, so this panel is purely the header + tab state.
  */
 export function useAlbumPanel(albumPath: string, shares: ShareSummary[]) {
-  const [tab, setTab] = useState<AlbumTab>('all');
+  // The tab she picked, remembered for this album only; opening another album
+  // starts from that album's own default again.
+  const [choice, setChoice] = useState<{ album: string; tab: AlbumTab } | null>(null);
+  const tab = choice?.album === albumPath ? choice.tab : null;
+  const setTab = (t: AlbumTab) => setChoice({ album: albumPath, tab: t });
   const enabled = albumPath !== '';
   const editedKey = `${albumPath}/Edited`;
   // Albums copy into Selected/JPG and/or Selected/RAW depending on the formats
@@ -56,10 +60,14 @@ export function useAlbumPanel(albumPath: string, shares: ShareSummary[]) {
   const finalSet = new Set(share?.final ?? []);
   const shortSet = new Set(share?.selections ?? []);
 
-  // Picks and shortlist only exist once a client has a proofing link. An album
-  // with nothing in Selected/ but edits in Edited/ opens on the edits.
+  // Picks and shortlist only exist once a client has a proofing link. Until she
+  // picks a tab, the album opens where its next job is: the client's picks once
+  // they're in, else the edits once there are any, else the originals.
   const hasProofing = !!share && share.kind !== 'delivery';
-  const requested: AlbumTab = hasProofing ? tab : tab === 'picks' || tab === 'shortlist' ? 'all' : tab;
+  const auto: AlbumTab = hasProofing && share.phase === 'submitted' && finalSet.size > 0 ? 'picks'
+    : editedItems.length > 0 ? 'edited' : 'all';
+  const wanted = tab ?? auto;
+  const requested: AlbumTab = hasProofing ? wanted : wanted === 'picks' || wanted === 'shortlist' ? 'all' : wanted;
   const effectiveTab: AlbumTab = requested === 'all' && allItems.length === 0 && editedItems.length > 0 ? 'edited' : requested;
   const items: GalleryItem[] =
     effectiveTab === 'picks' ? editedItems.filter((i) => finalSet.has(i.name))
