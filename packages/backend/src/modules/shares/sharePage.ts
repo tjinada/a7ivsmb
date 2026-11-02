@@ -56,7 +56,8 @@ function fill(tpl: string, vars: Record<string, string>): string {
 /** Render the full standalone client page for a share slug. */
 export async function renderSharePage(slug: string, meta: { albumName: string; kind: ShareKind }): Promise<string> {
   const brand = escAttr(config.shares.brandName);
-  const album = escAttr(albumTitle(meta.albumName).title);
+  const shown = albumTitle(meta.albumName);
+  const album = escAttr(shown.title);
   const title = `${album} — ${brand}`;
   const desc = meta.kind === 'delivery'
     ? 'Your photos are ready to view and download.'
@@ -81,6 +82,7 @@ export async function renderSharePage(slug: string, meta: { albumName: string; k
     SLUG: escAttr(slug),
     BRAND: brand,
     ALBUM: album,
+    DATE: escAttr(shown.date ?? ''),
     ASSET_V: SHARE_ASSET_VERSION,
   });
 }

@@ -111,13 +111,14 @@
   function renderGate() {
     const brand = document.body.dataset.brand || 'Your photographer';
     const album = document.body.dataset.album || 'Private gallery';
+    const date = fmtDate(document.body.dataset.date);
     app.replaceChildren(el(
       '<div class="gate">'
-      + '<div class="brand"><span class="brand-mark" aria-hidden="true"></span>' + esc(brand) + '</div>'
+      + '<div class="brand">' + esc(brand) + '</div>'
       + '<div class="card">'
-      + '<div class="intro"><span class="eyebrow">A private gallery for you</span>'
-      + '<h1>' + esc(album) + '</h1>'
-      + '<p class="muted">' + esc(brand) + ' has shared these photos with you. Enter the password from your message to open the gallery.</p></div>'
+      + '<div class="intro">' + (date ? '<p class="gate-date">' + esc(date) + '</p>' : '')
+      + '<h1 class="gate-title">' + esc(album) + '</h1><span class="rule" aria-hidden="true"></span>'
+      + '<p class="muted">Enter the password from your message.</p></div>'
       + '<form id="gateForm">'
       + '<label for="pw">Password</label>'
       + '<div class="field"><input id="pw" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false"/>'

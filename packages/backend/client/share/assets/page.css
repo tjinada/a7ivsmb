@@ -55,14 +55,23 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 
 /* ── Gate / static cards ────────────────────────────────────────────────── */
 .gate { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; padding: calc(var(--safe-top) + 28px) 24px calc(var(--safe-bottom) + 32px); }
-.gate .card { flex: 1 1 auto; max-width: 440px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; justify-content: center; gap: 28px; }
+.gate > .brand { justify-content: center; font-size: 12px; letter-spacing: .24em; color: var(--text); }
+.gate .card { flex: 1 1 auto; max-width: 400px; width: 100%; margin: 0 auto; padding: 32px 0; display: flex; flex-direction: column; justify-content: center; gap: 32px; }
+.gate .card.center { align-items: center; text-align: center; gap: 16px; }
+.gate .card.center h1 { font-size: 26px; }
 .gate .foot { text-align: center; font-size: 12px; color: var(--faint); margin-top: 24px; }
 .gate h1 { font-size: 34px; line-height: 1.15; font-weight: 600; letter-spacing: -.01em; }
-.gate .intro { display: flex; flex-direction: column; gap: 10px; }
+.gate .intro { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+.gate .gate-date { font-size: 12px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.gate h1.gate-title { font-family: var(--display); font-weight: 500; font-size: 26px; line-height: 1.2; letter-spacing: .06em; text-transform: uppercase; text-wrap: balance; }
+.gate .rule { width: 24px; height: 1px; background: var(--accent); }
+.gate .muted { font-size: 15px; }
+.gate .btn { min-height: 52px; border-radius: 10px; font-size: 16px; }
+.gate .hint { font-size: 13px; margin-top: 4px; }
 .gate .eyebrow { font-size: 13px; color: var(--muted); }
 .gate form { display: flex; flex-direction: column; gap: 12px; }
 .gate label { font-size: 13px; font-weight: 500; color: var(--muted); }
-.field { display: flex; align-items: center; height: 52px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 0 6px 0 14px; }
+.field { display: flex; align-items: center; height: 52px; background: #FFFFFF; border: 1px solid var(--border-strong); border-radius: 12px; padding: 0 6px 0 14px; }
 .field:focus-within { border-color: var(--accent); }
 .field input { flex: 1 1 auto; min-width: 0; height: 100%; background: transparent; border: 0; outline: 0; color: var(--text); font-size: 17px; }
 .field .icon-btn { background: transparent; color: var(--muted); }
@@ -71,7 +80,14 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 .status.err { color: var(--danger); }
 .status.above { margin: 0 0 8px; }
 .status.above:empty { display: none; }
-@media (min-width: 900px) { .gate h1 { font-size: 40px; } }
+@media (min-width: 900px) {
+  .gate h1 { font-size: 40px; }
+  .gate h1.gate-title { font-size: 36px; line-height: 1.15; letter-spacing: .05em; }
+  /* Let the title run wider than the form so typical names stay on one line. */
+  .gate .card { max-width: 640px; }
+  .gate form { width: 100%; max-width: 420px; align-self: center; }
+  .gate > .brand { font-size: 13px; letter-spacing: .26em; }
+}
 
 /* ── Gallery shell ──────────────────────────────────────────────────────── */
 .shell { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
