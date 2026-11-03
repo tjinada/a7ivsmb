@@ -23,6 +23,7 @@ import {
 } from './shares.store.js';
 import { hashPassword, verifyPassword, newId, newSlug } from './shares.auth.js';
 import { progressStart, progressTick, progressEnd } from './shares.progress.js';
+import { loadActivity, activityOf, deleteActivity } from './shares.activity.js';
 import { compareNames } from '../../utils/naturalOrder.js';
 import { albumTitle } from './albumTitle.js';
 
@@ -258,6 +259,8 @@ function toSummary(rec: ShareRecord): ShareSummary {
     selections: [...rec.selections],
     finalCount: finalOf(rec).length,
     final: [...finalOf(rec)],
+    deliverable: rec.phase === 'delivery' ? [...deliverable(rec)] : [],
+    activity: activityOf(rec.slug),
     url: publicUrl(rec.slug),
     createdAt: rec.createdAt,
     submittedAt: rec.submittedAt,
@@ -407,6 +410,7 @@ export const sharesService = {
   /** All shares, newest first (owner dashboard). */
   async list(): Promise<ShareSummary[]> {
     await loadShares();
+    await loadActivity();
     return listShares().map(toSummary);
   },
 
@@ -455,13 +459,14 @@ export const sharesService = {
     return toSummary(next);
   },
 
-  /** Revoke a share: delete its preview folder and its record. */
+  /** Revoke a share: delete its preview folder, its record and its activity. */
   async revoke(id: string): Promise<void> {
     await loadShares();
     const rec = getShareById(id);
     if (!rec) throw new AppError('Share not found', 404);
     await fs.rm(path.join(config.dataDir, 'shares', rec.id), { recursive: true, force: true });
     await deleteShare(rec.id);
+    await deleteActivity(rec.slug);
   },
 
   // ── Client (public) surface ───────────────────────────────────────────────

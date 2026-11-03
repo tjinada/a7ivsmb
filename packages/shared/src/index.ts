@@ -246,9 +246,24 @@ export interface ShareSummary {
   selections: string[];     // the client's shortlist (subset of previews)
   finalCount: number;       // final picks (the set that gets edited)
   final: string[];          // the client's final picks (subset of selections)
+  deliverable: string[];    // files the client can download (empty until delivery)
+  activity: ShareActivity;  // what the client has done with the link
   url: string;              // public client link (absolute when SHARE_HOST set)
   createdAt: number;        // epoch ms
   submittedAt: number | null;
+}
+
+/** What a client did with a share link (Phase 11). The owner's own visits
+ *  via "Open as client" are not counted. */
+export interface ShareActivity {
+  opens: number;                     // visits (once per device per 30 min)
+  firstOpenedAt: number | null;      // epoch ms
+  lastOpenedAt: number | null;
+  devices: string[];                 // device classes, most recently seen first
+  downloads: Record<string, number>; // file -> completed single-photo downloads
+  lastDownloadAt: number | null;
+  zipStarted: number;                // download-all ZIPs begun
+  zipCompleted: number;              // ...and fully sent (counts every photo as downloaded)
 }
 
 /** Result of POST /api/gallery/shares (create). Same shape as a summary. */

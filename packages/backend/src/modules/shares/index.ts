@@ -1,4 +1,5 @@
 import { loadShares, getShareBySlug } from './shares.store.js';
+import { loadActivity } from './shares.activity.js';
 import { logger } from '../../utils/logger.js';
 import type { ShareKind } from '@sonycam/shared';
 
@@ -12,6 +13,7 @@ export { isValidSlug } from './shares.auth.js';
 export async function initShares(): Promise<void> {
   try {
     await loadShares();
+    await loadActivity();
   } catch (err) {
     logger.error('Failed to load shares', 'Shares', err);
   }

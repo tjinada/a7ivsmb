@@ -2,7 +2,8 @@ import type { Request, Response, NextFunction } from 'express';
 import archiver from 'archiver';
 import { sharesService } from './shares.service.js';
 import { isValidProgressId, progressGet } from './shares.progress.js';
-import { setShareCookie } from './shares.auth.js';
+import { setShareCookie, isPreviewRequest } from './shares.auth.js';
+import { recordOpen, recordDownload, recordZip } from './shares.activity.js';
 import { sendSuccess } from '../../utils/response.js';
 import { AppError } from '../../middleware/index.js';
 
@@ -98,7 +99,9 @@ export const sharesController = {
       const ok = await sharesService.authenticate(slug, password);
       if (!ok) throw new AppError('Incorrect password', 401);
       setShareCookie(res, slug);
-      sendSuccess(res, await sharesService.publicState(slug));
+      const state = await sharesService.publicState(slug);
+      if (!isPreviewRequest(req)) recordOpen(slug, req.get('user-agent'));
+      sendSuccess(res, state);
     } catch (err) {
       next(err);
     }
@@ -107,7 +110,9 @@ export const sharesController = {
   async state(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       noStore(res);
-      sendSuccess(res, await sharesService.publicState(req.params.slug));
+      const state = await sharesService.publicState(req.params.slug);
+      if (!isPreviewRequest(req)) recordOpen(req.params.slug, req.get('user-agent'));
+      sendSuccess(res, state);
     } catch (err) {
       next(err);
     }
@@ -174,6 +179,8 @@ export const sharesController = {
       res.set('Content-Type', type);
       res.set('Content-Length', String(size));
       res.set('Content-Disposition', `attachment; filename="${name.replace(/"/g, '')}"`);
+      // Counted only once fully sent: an aborted transfer never fires 'finish'.
+      if (!isPreviewRequest(req)) res.on('finish', () => recordDownload(req.params.slug, name));
       stream.on('error', next);
       stream.pipe(res);
     } catch (err) {
@@ -189,6 +196,10 @@ export const sharesController = {
       res.set('Content-Disposition', attachment(`${title}.zip`));
       const archive = archiver('zip', { zlib: { level: 0 } });
       archive.on('error', (err) => res.destroy(err));
+      if (!isPreviewRequest(req)) {
+        recordZip(req.params.slug, 'started');
+        res.on('finish', () => recordZip(req.params.slug, 'completed'));
+      }
       archive.pipe(res);
       for (const f of files) archive.file(f.abs, { name: f.name });
       await archive.finalize();

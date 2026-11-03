@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Copy, Check, Send, Loader2, MoreHorizontal, Heart, Download, RefreshCw, FolderOpen, Power, Eye, Sparkles,
+  Activity, ExternalLink,
 } from 'lucide-react';
 import type { ShareSummary } from '@sonycam/shared';
 import { AuthImage } from '@/features/gallery/AuthImage';
@@ -67,6 +68,26 @@ function linkLine(s: ShareSummary): string {
   return `Picking link · up to ${s.cap} · sent ${fmtAgo(s.createdAt)} · ${s.finalCount} final picks`;
 }
 
+/** Delivered files the client has downloaded (a finished ZIP counts for all). */
+function downloadedOf(s: ShareSummary): string[] {
+  const a = s.activity;
+  return a.zipCompleted > 0 ? s.deliverable : s.deliverable.filter((f) => (a.downloads[f] ?? 0) > 0);
+}
+
+/** One line on what the client has done with a link. */
+function activityLine(s: ShareSummary): string {
+  const a = s.activity;
+  const parts: string[] = [];
+  if (a.lastOpenedAt) {
+    parts.push(`Opened ${a.opens}×`, `last ${fmtAgo(a.lastOpenedAt)}${a.devices[0] ? ` on ${a.devices[0]}` : ''}`);
+  }
+  if (s.deliverable.length > 0 && (a.lastOpenedAt || a.lastDownloadAt)) {
+    parts.push(`${downloadedOf(s).length} of ${s.deliverable.length} downloaded`);
+    if (a.zipStarted > 0 && a.zipCompleted === 0) parts.push('ZIP started, not finished');
+  }
+  return parts.length ? parts.join(' · ') : 'Not opened yet';
+}
+
 const BTN = 'flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border-strong px-2.5 py-1.5 text-xs font-medium text-gray-200 transition hover:bg-base disabled:opacity-50';
 
 export function ClientCard({
@@ -81,6 +102,8 @@ export function ClientCard({
   const proofing = g.links.find((s) => s.kind !== 'delivery');
   const [picksOpen, setPicksOpen] = useState(defaultOpen && !!proofing);
   const [revoking, setRevoking] = useState<ShareSummary | null>(null);
+  const [activityId, setActivityId] = useState<string | null>(null);
+  const activityShare = g.links.find((s) => s.id === activityId);
   const pill = statusPill(g);
   const cover = g.links.find((s) => s.cover)?.cover;
   const needsYou = g.state === 'needs-you' && proofing;
@@ -96,7 +119,9 @@ export function ClientCard({
   const compact = g.links.length === 1 && !needsYou;
   // Wide screens show cards in two columns; anything needing room or
   // attention takes the full width.
-  const wide = !!needsYou || picksOpen;
+  const wide = !!needsYou || picksOpen || !!activityShare;
+  // An open panel lets the card grow past its fixed height.
+  const expanded = picksOpen || !!activityShare;
 
   /** Copy + ⋯ for one link. */
   const controls = (s: ShareSummary) => (
@@ -113,6 +138,8 @@ export function ClientCard({
         onUpdate={() => a.refresh(s)}
         onPicks={s.kind !== 'delivery' && s.selectedCount > 0 ? () => setPicksOpen((o) => !o) : undefined}
         picksOpen={picksOpen}
+        onActivity={() => setActivityId((id) => (id === s.id ? null : s.id))}
+        activityOpen={activityId === s.id}
         onTurnOff={() => setRevoking(s)}
       />
     </>
@@ -122,11 +149,11 @@ export function ClientCard({
     // Every card is the same fixed height on tablet and up, with a large cover
     // filling the left side; the header and links sit beside it, a one-row
     // card centres its header, and anything beyond the height scrolls inside
-    // the card. Only a card with its picks open grows. On phones the cover is
+    // the card. Only a card with picks or activity open grows. On phones the cover is
     // smaller and the links run full width under it.
     <div className={`grid grid-cols-[5rem_minmax(0,1fr)] gap-x-4 rounded-2xl border bg-surface p-4 sm:grid-cols-[10rem_minmax(0,1fr)] ${
       compact ? 'sm:grid-rows-[minmax(0,1fr)_auto]' : 'sm:grid-rows-[auto_minmax(0,1fr)]'
-    } ${picksOpen ? '' : 'sm:h-[192px]'} ${
+    } ${expanded ? '' : 'sm:h-[192px]'} ${
       needsYou ? 'border-primary-500' : 'border-border'
     } ${wide ? 'xl:col-span-2' : ''}`}>
       {cover ? (
@@ -144,6 +171,7 @@ export function ClientCard({
           <p className="mt-1 truncate text-xs text-gray-500">
             {compact ? linkLine(g.links[0]) : `${g.links.length} link${g.links.length === 1 ? '' : 's'} · last activity ${fmtAgo(g.lastActivity)}`}
           </p>
+          {compact && <p className="mt-0.5 truncate text-[11px] text-gray-500">{activityLine(g.links[0])}</p>}
           {/* On phones the pill sits under the name. */}
           <span className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold sm:hidden ${pill.cls}`}>
             <span className="h-1.5 w-1.5 rounded-full bg-current" />{pill.text}
@@ -175,7 +203,10 @@ export function ClientCard({
               <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-white/[0.06] text-gray-400">
                 {s.kind === 'delivery' ? <Download className="h-3.5 w-3.5" /> : <Heart className="h-3.5 w-3.5" />}
               </span>
-              <span className="min-w-0 flex-1 text-xs leading-snug text-gray-300 sm:truncate">{linkLine(s)}</span>
+              <span className="min-w-0 flex-1 leading-snug">
+                <span className="block text-xs text-gray-300 sm:truncate">{linkLine(s)}</span>
+                <span className="block text-[11px] text-gray-500 sm:truncate">{activityLine(s)}</span>
+              </span>
               {controls(s)}
             </div>
           ))}
@@ -205,6 +236,7 @@ export function ClientCard({
       )}
 
       {picksOpen && proofing && <PicksPanel share={proofing} actions={a} />}
+      {activityShare && <ActivityPanel share={activityShare} />}
       </div>
 
       {revoking && (
@@ -221,14 +253,17 @@ export function ClientCard({
   );
 }
 
-/** ⋯ for one link: update its photos, open the album, view picks, turn off. */
-function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen, onTurnOff }: {
+/** ⋯ for one link: view picks or activity, update its photos, open as the
+ *  client, open the album, turn off. */
+function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen, onActivity, activityOpen, onTurnOff }: {
   share: ShareSummary;
   busy: boolean;
   editedInAlbum?: number;
   onUpdate: () => void;
   onPicks?: () => void;
   picksOpen: boolean;
+  onActivity: () => void;
+  activityOpen: boolean;
   onTurnOff: () => void;
 }) {
   // The menu floats (position: fixed) so a fixed-height card that scrolls
@@ -247,7 +282,7 @@ function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen,
     if (open) { close(); return; }
     const r = e.currentTarget.getBoundingClientRect();
     const right = window.innerWidth - r.right;
-    setPos(window.innerHeight - r.bottom < 220 ? { bottom: window.innerHeight - r.top + 4, right } : { top: r.bottom + 4, right });
+    setPos(window.innerHeight - r.bottom < 300 ? { bottom: window.innerHeight - r.top + 4, right } : { top: r.bottom + 4, right });
   };
   const pick = (fn: () => void) => () => { close(); fn(); };
   const item = 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-gray-200 transition hover:bg-white/[0.06] disabled:opacity-50';
@@ -270,6 +305,13 @@ function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen,
                 <Eye className="h-4 w-4 text-gray-400" />{picksOpen ? 'Hide picks' : `View picks (${s.finalCount || s.selectedCount})`}
               </button>
             )}
+            <button type="button" onClick={pick(onActivity)} className={item}>
+              <Activity className="h-4 w-4 text-gray-400" />{activityOpen ? 'Hide activity' : 'Activity'}
+            </button>
+            {/* ?preview marks this browser so your own visits aren't counted. */}
+            <a href={`${s.url}?preview`} target="_blank" rel="noopener noreferrer" onClick={close} className={item}>
+              <ExternalLink className="h-4 w-4 text-gray-400" />Open as client
+            </a>
             <button type="button" onClick={pick(onUpdate)} disabled={busy} className={item}>
               <RefreshCw className="h-4 w-4 text-gray-400" />
               Update photos{editedInAlbum !== undefined ? ` (${editedInAlbum} edited)` : ''}
@@ -325,6 +367,70 @@ function PicksPanel({ share: s, actions: a }: { share: ShareSummary; actions: Ac
           {a.copiedNamesId === s.id ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
           {a.copiedNamesId === s.id ? 'Copied' : 'Copy filenames'}
         </button>
+      )}
+    </div>
+  );
+}
+
+/** "Nov 2, 8:41 PM" style date-time from epoch ms. */
+function fmtWhen(ms: number): string {
+  return new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+/** What the client has done with one link: visits, devices, and which of the
+ *  delivered photos they've downloaded. */
+function ActivityPanel({ share: s }: { share: ShareSummary }) {
+  const act = s.activity;
+  const got = new Set(downloadedOf(s));
+  const LABEL = 'text-[10px] font-semibold uppercase tracking-wider text-gray-500';
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <p className={`mb-1.5 ${LABEL}`}>Activity · {s.kind === 'delivery' ? 'download link' : 'picking link'}</p>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-0.5 text-xs">
+        <dt className="text-gray-500">Visits</dt>
+        <dd className="text-gray-300">{act.opens}</dd>
+        <dt className="text-gray-500">First opened</dt>
+        <dd className="text-gray-300">{act.firstOpenedAt ? fmtWhen(act.firstOpenedAt) : 'Not yet'}</dd>
+        <dt className="text-gray-500">Last opened</dt>
+        <dd className="text-gray-300">{act.lastOpenedAt ? `${fmtWhen(act.lastOpenedAt)} · ${fmtAgo(act.lastOpenedAt)}` : '—'}</dd>
+        <dt className="text-gray-500">Devices</dt>
+        <dd className="text-gray-300">{act.devices.length ? act.devices.join(', ') : '—'}</dd>
+        {act.zipStarted > 0 && (
+          <>
+            <dt className="text-gray-500">ZIP</dt>
+            <dd className="text-gray-300">
+              {act.zipCompleted > 0 ? `Downloaded ${act.zipCompleted}×` : 'Started, never finished'}
+              {act.zipStarted > act.zipCompleted && act.zipCompleted > 0 ? ` · ${act.zipStarted - act.zipCompleted} unfinished` : ''}
+            </dd>
+          </>
+        )}
+      </dl>
+      {s.deliverable.length > 0 ? (
+        <>
+          <p className={`mb-1 mt-2.5 ${LABEL}`}>
+            Downloaded · {got.size} of {s.deliverable.length}
+            {act.lastDownloadAt ? ` · last ${fmtAgo(act.lastDownloadAt)}` : ''}
+          </p>
+          <div className="grid grid-cols-6 gap-1 sm:grid-cols-8">
+            {s.deliverable.map((f) => {
+              const n = act.downloads[f] ?? 0;
+              return (
+                <div key={f} className="relative" title={got.has(f) ? `${f} · downloaded` : `${f} · not downloaded`}>
+                  <AuthImage
+                    src={thumbUrl(`${s.albumPath}/Edited/${f}`)}
+                    alt={f}
+                    className={`aspect-square overflow-hidden rounded bg-base ${got.has(f) ? '' : 'opacity-30'}`}
+                  />
+                  {n > 0 && (
+                    <span className="absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 text-[10px] font-semibold leading-4 text-white">{n}×</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <p className="mt-2.5 text-xs text-gray-500">Downloads show here once the final photos are sent.</p>
       )}
     </div>
   );

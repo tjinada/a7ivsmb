@@ -12,6 +12,7 @@ export class JsonStore<T> {
   private readonly file: string;
   private data: T;
   private writing: Promise<void> = Promise.resolve();
+  private timer: NodeJS.Timeout | null = null;
 
   constructor(filename: string, private readonly defaults: T) {
     this.file = path.join(config.dataDir, filename);
@@ -40,8 +41,22 @@ export class JsonStore<T> {
     return this.data;
   }
 
+  /** Replace state now and persist once, `delayMs` after the last call.
+   *  For bursty counters where losing a few seconds on restart is fine. */
+  updateDeferred(fn: (current: T) => T, delayMs: number): T {
+    this.data = fn(this.data);
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.persist().catch(() => { /* data stays in memory; the next write retries */ });
+    }, delayMs);
+    this.timer.unref();
+    return this.data;
+  }
+
   private async persist(): Promise<void> {
-    this.writing = this.writing.then(async () => {
+    // A failed write mustn't wedge the chain for every later one.
+    this.writing = this.writing.catch(() => undefined).then(async () => {
       await fs.mkdir(config.dataDir, { recursive: true });
       const tmp = `${this.file}.tmp`;
       await fs.writeFile(tmp, JSON.stringify(this.data, null, 2), 'utf8');

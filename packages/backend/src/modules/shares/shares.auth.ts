@@ -64,6 +64,14 @@ function readCookie(req: Request, name: string): string | null {
   return null;
 }
 
+/** Set by the client page when the owner opens a link via "Open as client".
+ *  Requests carrying it aren't recorded as client activity. */
+export const PREVIEW_COOKIE = 'sonycam_preview';
+
+export function isPreviewRequest(req: Request): boolean {
+  return readCookie(req, PREVIEW_COOKIE) === '1';
+}
+
 /** Set the path-scoped share cookie after a successful password unlock. */
 export function setShareCookie(res: Response, slug: string): void {
   const payload: SharePayload = { type: 'share', slug };

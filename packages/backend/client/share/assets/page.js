@@ -7,6 +7,12 @@
 
   const SLUG = document.body.dataset.slug || '';
   const API = '/api/public/share/' + encodeURIComponent(SLUG);
+  // Opened by the owner via "Open as client": mark this browser so its visits
+  // and downloads on this link aren't counted as client activity.
+  if (new URLSearchParams(location.search).has('preview')) {
+    document.cookie = 'sonycam_preview=1; path=' + API + '; max-age=' + (30 * 24 * 3600) + '; SameSite=Lax'
+      + (location.protocol === 'https:' ? '; Secure' : '');
+  }
   const app = document.getElementById('app');
   const COARSE = window.matchMedia('(pointer: coarse)').matches;
   const TAP = COARSE ? 'tap' : 'click';
