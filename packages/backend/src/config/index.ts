@@ -84,6 +84,11 @@ export const config = {
   shares: {
     previewMaxEdge: Number(process.env.SHARE_PREVIEW_MAX_EDGE ?? 1600),
     previewQuality: Number(process.env.SHARE_PREVIEW_QUALITY ?? 80),
+    // Unwatermarked previews of delivered photos (cover + full-screen view).
+    // Bigger: the client can download the originals anyway, and a phone's
+    // full-bleed cover or a 2.5x zoom needs the pixels.
+    deliveryPreviewMaxEdge: Number(process.env.SHARE_DELIVERY_PREVIEW_MAX_EDGE ?? 2560),
+    deliveryPreviewQuality: Number(process.env.SHARE_DELIVERY_PREVIEW_QUALITY ?? 88),
     watermarkText: process.env.SHARE_WATERMARK_TEXT ?? 'Preview',
     cookieTtlDays: Number(process.env.SHARE_COOKIE_TTL_DAYS ?? 7),
     // Who the client page says the gallery is from, and what it tells them

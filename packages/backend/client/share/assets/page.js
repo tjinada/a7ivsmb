@@ -48,9 +48,10 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
   const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
-  // Previews/thumbs are re-rendered without the watermark on delivery and are
-  // cached for a day, so the delivery phase asks for a different URL.
-  const ver = () => (state && state.phase === 'delivery' ? '?v=d' : '');
+  // Previews/thumbs are re-rendered without the watermark (and larger) on
+  // delivery and are cached for a day, so the delivery phase asks for a
+  // different URL. d2: delivery previews went from 1600px to 2560px.
+  const ver = () => (state && state.phase === 'delivery' ? '?v=d2' : '');
   // THUMB_REV changes the URL when thumbs are re-rendered at a new size, so
   // day-cached old ones aren't reused.
   const THUMB_REV = 'r2';

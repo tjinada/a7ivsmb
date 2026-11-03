@@ -218,16 +218,16 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return results;
 }
 
-/** Regenerate the watermarked preview set for a share from its album's Edited/.
- *  When a progressId is supplied, done/total counts are published for the
- *  owner UI to poll; the entry lives exactly as long as this function runs. */
 /** Sharp decodes are memory-heavy: cap parallel renders at 4 (or the cores). */
 const RENDER_CONCURRENCY = Math.max(1, Math.min(os.cpus().length, 4));
 
-/** Render one edited JPG to its preview (webp, optionally watermarked) and grid
- *  thumb, overwriting any existing files. Null if sharp can't decode it. */
+/** Render one edited JPG to its preview (webp) and grid thumb, overwriting any
+ *  existing files. Watermarked proofing previews stay small; unwatermarked
+ *  (delivered) ones render larger and sharper. Null if sharp can't decode it. */
 async function renderPreview(editedDir: string, name: string, dir: string, tdir: string, watermark: boolean): Promise<Rendered | null> {
-  const { previewMaxEdge, previewQuality } = config.shares;
+  const s = config.shares;
+  const previewMaxEdge = watermark ? s.previewMaxEdge : s.deliveryPreviewMaxEdge;
+  const previewQuality = watermark ? s.previewQuality : s.deliveryPreviewQuality;
   const src = path.join(editedDir, name);
   const out = path.join(dir, previewNameFor(name));
   try {
@@ -251,7 +251,11 @@ async function renderPreview(editedDir: string, name: string, dir: string, tdir:
   }
 }
 
-async function generatePreviews(id: string, albumPath: string, progressId?: string, watermark = true): Promise<Rendered[]> {
+/** Re-render every preview for a share from its album's Edited/. `delivered`
+ *  says which photos the client already has (rendered clean and large); the
+ *  rest are watermarked proofing previews. With a progressId, done/total
+ *  counts are published for the owner UI to poll while this runs. */
+async function generatePreviews(id: string, albumPath: string, progressId: string | undefined, delivered: (name: string) => boolean): Promise<Rendered[]> {
   const items = await listEditedJpgs(albumPath);
   const dir = previewsDirFor(id);
   const tdir = thumbsDirFor(id);
@@ -270,7 +274,7 @@ async function generatePreviews(id: string, albumPath: string, progressId?: stri
     // previews that landed.
     const results = await mapLimit(items, RENDER_CONCURRENCY, async (name) => {
       try {
-        return await renderPreview(editedDir, name, dir, tdir, watermark);
+        return await renderPreview(editedDir, name, dir, tdir, !delivered(name));
       } finally {
         if (progressId) progressTick(progressId); // counts processed, not just succeeded
       }
@@ -432,7 +436,7 @@ export const sharesService = {
     }
 
     const id = newId();
-    const rendered = await generatePreviews(id, albumPath, progressId, !isDelivery);
+    const rendered = await generatePreviews(id, albumPath, progressId, () => isDelivery);
     if (rendered.length === 0) throw new AppError('Could not generate any previews', 500);
     const items = rendered.map((r) => r.name);
 
@@ -533,7 +537,12 @@ export const sharesService = {
     await loadShares();
     const rec = getShareById(id);
     if (!rec) throw new AppError('Share not found', 404);
-    const rendered = await generatePreviews(rec.id, rec.albumPath, progressId, kindOf(rec) !== 'delivery');
+    // A download link delivers everything, new edits included. A picking link
+    // already sent its finals: those stay clean; the rest stay watermarked
+    // (re-watermarking delivered finals here was a bug).
+    const allDelivered = kindOf(rec) === 'delivery';
+    const finals = new Set(rec.phase === 'delivery' ? finalOf(rec) : []);
+    const rendered = await generatePreviews(rec.id, rec.albumPath, progressId, (n) => allDelivered || finals.has(n));
     if (rendered.length === 0) throw new AppError('No edited JPGs to publish', 400);
     const items = rendered.map((r) => r.name);
     const keep = new Set(items);
