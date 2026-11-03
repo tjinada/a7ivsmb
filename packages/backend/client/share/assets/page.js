@@ -136,7 +136,6 @@
       + '<p id="gerr" class="status err" aria-live="polite"></p>'
       + '<span class="hint">You’ll stay signed in on this device for 7 days.</span>'
       + '</form></div>'
-      + '<div class="foot">Private link · please don’t forward it</div>'
       + '</div>',
     ));
     const form = document.getElementById('gateForm');

@@ -59,7 +59,6 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 .gate .card { flex: 1 1 auto; max-width: 400px; width: 100%; margin: 0 auto; padding: 32px 0; display: flex; flex-direction: column; justify-content: center; gap: 32px; }
 .gate .card.center { align-items: center; text-align: center; gap: 16px; }
 .gate .card.center h1 { font-size: 26px; }
-.gate .foot { text-align: center; font-size: 12px; color: var(--faint); margin-top: 24px; }
 .gate h1 { font-size: 34px; line-height: 1.15; font-weight: 600; letter-spacing: -.01em; }
 .gate .intro { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
 .gate .gate-date { font-size: 12px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
