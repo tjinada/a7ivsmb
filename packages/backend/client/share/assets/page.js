@@ -134,7 +134,6 @@
       + '<button type="button" class="icon-btn" id="pwToggle" aria-label="Show password">' + ICON.eye + '</button></div>'
       + '<button type="submit" class="btn primary block" id="go">Open gallery</button>'
       + '<p id="gerr" class="status err" aria-live="polite"></p>'
-      + '<span class="hint">You’ll stay signed in on this device for 7 days.</span>'
       + '</form></div>'
       + '</div>',
     ));

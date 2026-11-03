@@ -66,7 +66,6 @@ img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -we
 .gate .rule { width: 24px; height: 1px; background: var(--accent); }
 .gate .muted { font-size: 15px; }
 .gate .btn { min-height: 52px; border-radius: 10px; font-size: 16px; }
-.gate .hint { font-size: 13px; margin-top: 4px; }
 .gate .eyebrow { font-size: 13px; color: var(--muted); }
 .gate form { display: flex; flex-direction: column; gap: 12px; }
 .gate label { font-size: 13px; font-weight: 500; color: var(--muted); }
