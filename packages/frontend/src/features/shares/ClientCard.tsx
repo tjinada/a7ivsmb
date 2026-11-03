@@ -242,7 +242,7 @@ export function ClientCard({
       {revoking && (
         <ConfirmDialog
           title={`Turn off this link for "${g.albumName}"?`}
-          message="The client will no longer be able to open it. Their picks are kept."
+          message={`The client will no longer be able to open it. Its ${revoking.kind === 'delivery' ? '' : 'picks and '}activity history will be deleted.`}
           confirmLabel="Turn off link"
           busy={a.revoking}
           onConfirm={() => { a.revoke(revoking); setRevoking(null); }}
