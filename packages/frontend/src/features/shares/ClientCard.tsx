@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Copy, Check, Send, Loader2, MoreHorizontal, Heart, Download, RefreshCw, FolderOpen, Power, Eye, Sparkles,
-  Activity, ExternalLink,
+  Activity, ExternalLink, Image as ImageIcon,
 } from 'lucide-react';
 import type { ShareSummary } from '@sonycam/shared';
 import { AuthImage } from '@/features/gallery/AuthImage';
@@ -102,8 +102,12 @@ export function ClientCard({
   const proofing = g.links.find((s) => s.kind !== 'delivery');
   const [picksOpen, setPicksOpen] = useState(defaultOpen && !!proofing);
   const [revoking, setRevoking] = useState<ShareSummary | null>(null);
-  const [activityId, setActivityId] = useState<string | null>(null);
-  const activityShare = g.links.find((s) => s.id === activityId);
+  // One link's Activity or cover panel at a time.
+  const [panel, setPanel] = useState<{ id: string; kind: 'activity' | 'cover' } | null>(null);
+  const panelShare = panel ? g.links.find((s) => s.id === panel.id) : undefined;
+  const togglePanel = (s: ShareSummary, kind: 'activity' | 'cover') =>
+    setPanel((p) => (p && p.id === s.id && p.kind === kind ? null : { id: s.id, kind }));
+  const panelOpen = (s: ShareSummary, kind: 'activity' | 'cover') => panel?.id === s.id && panel.kind === kind;
   const pill = statusPill(g);
   const cover = g.links.find((s) => s.cover)?.cover;
   const needsYou = g.state === 'needs-you' && proofing;
@@ -119,9 +123,9 @@ export function ClientCard({
   const compact = g.links.length === 1 && !needsYou;
   // Wide screens show cards in two columns; anything needing room or
   // attention takes the full width.
-  const wide = !!needsYou || picksOpen || !!activityShare;
+  const wide = !!needsYou || picksOpen || !!panelShare;
   // An open panel lets the card grow past its fixed height.
-  const expanded = picksOpen || !!activityShare;
+  const expanded = picksOpen || !!panelShare;
 
   /** Copy + ⋯ for one link. */
   const controls = (s: ShareSummary) => (
@@ -138,8 +142,10 @@ export function ClientCard({
         onUpdate={() => a.refresh(s)}
         onPicks={s.kind !== 'delivery' && s.selectedCount > 0 ? () => setPicksOpen((o) => !o) : undefined}
         picksOpen={picksOpen}
-        onActivity={() => setActivityId((id) => (id === s.id ? null : s.id))}
-        activityOpen={activityId === s.id}
+        onActivity={() => togglePanel(s, 'activity')}
+        activityOpen={panelOpen(s, 'activity')}
+        onCover={s.deliverable.length > 0 ? () => togglePanel(s, 'cover') : undefined}
+        coverOpen={panelOpen(s, 'cover')}
         onTurnOff={() => setRevoking(s)}
       />
     </>
@@ -149,7 +155,7 @@ export function ClientCard({
     // Every card is the same fixed height on tablet and up, with a large cover
     // filling the left side; the header and links sit beside it, a one-row
     // card centres its header, and anything beyond the height scrolls inside
-    // the card. Only a card with picks or activity open grows. On phones the cover is
+    // the card. Only a card with picks or a panel open grows. On phones the cover is
     // smaller and the links run full width under it.
     <div className={`grid grid-cols-[5rem_minmax(0,1fr)] gap-x-4 rounded-2xl border bg-surface p-4 sm:grid-cols-[10rem_minmax(0,1fr)] ${
       compact ? 'sm:grid-rows-[minmax(0,1fr)_auto]' : 'sm:grid-rows-[auto_minmax(0,1fr)]'
@@ -236,7 +242,8 @@ export function ClientCard({
       )}
 
       {picksOpen && proofing && <PicksPanel share={proofing} actions={a} />}
-      {activityShare && <ActivityPanel share={activityShare} />}
+      {panelShare && panel?.kind === 'activity' && <ActivityPanel share={panelShare} />}
+      {panelShare && panel?.kind === 'cover' && <CoverPanel share={panelShare} actions={a} />}
       </div>
 
       {revoking && (
@@ -253,9 +260,9 @@ export function ClientCard({
   );
 }
 
-/** ⋯ for one link: view picks or activity, update its photos, open as the
- *  client, open the album, turn off. */
-function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen, onActivity, activityOpen, onTurnOff }: {
+/** ⋯ for one link: view picks or activity, choose the cover, update its
+ *  photos, open as the client, open the album, turn off. */
+function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen, onActivity, activityOpen, onCover, coverOpen, onTurnOff }: {
   share: ShareSummary;
   busy: boolean;
   editedInAlbum?: number;
@@ -264,6 +271,9 @@ function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen,
   picksOpen: boolean;
   onActivity: () => void;
   activityOpen: boolean;
+  /** Only once the link delivers (the cover is the delivery page hero). */
+  onCover?: () => void;
+  coverOpen: boolean;
   onTurnOff: () => void;
 }) {
   // The menu floats (position: fixed) so a fixed-height card that scrolls
@@ -282,7 +292,7 @@ function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen,
     if (open) { close(); return; }
     const r = e.currentTarget.getBoundingClientRect();
     const right = window.innerWidth - r.right;
-    setPos(window.innerHeight - r.bottom < 300 ? { bottom: window.innerHeight - r.top + 4, right } : { top: r.bottom + 4, right });
+    setPos(window.innerHeight - r.bottom < 360 ? { bottom: window.innerHeight - r.top + 4, right } : { top: r.bottom + 4, right });
   };
   const pick = (fn: () => void) => () => { close(); fn(); };
   const item = 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-gray-200 transition hover:bg-white/[0.06] disabled:opacity-50';
@@ -308,6 +318,11 @@ function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen,
             <button type="button" onClick={pick(onActivity)} className={item}>
               <Activity className="h-4 w-4 text-gray-400" />{activityOpen ? 'Hide activity' : 'Activity'}
             </button>
+            {onCover && (
+              <button type="button" onClick={pick(onCover)} className={item}>
+                <ImageIcon className="h-4 w-4 text-gray-400" />{coverOpen ? 'Hide cover photo' : 'Choose cover photo'}
+              </button>
+            )}
             {/* ?preview marks this browser so your own visits aren't counted. */}
             <a href={`${s.url}?preview`} target="_blank" rel="noopener noreferrer" onClick={close} className={item}>
               <ExternalLink className="h-4 w-4 text-gray-400" />Open as client
@@ -432,6 +447,57 @@ function ActivityPanel({ share: s }: { share: ShareSummary }) {
       ) : (
         <p className="mt-2.5 text-xs text-gray-500">Downloads show here once the final photos are sent.</p>
       )}
+    </div>
+  );
+}
+
+/** Pick the photo shown as the banner on the client's delivery page. A tap
+ *  saves straight away; Use default goes back to the first delivered photo. */
+function CoverPanel({ share: s, actions: a }: { share: ShareSummary; actions: Actions }) {
+  // Show the tapped photo as current while the save round-trips.
+  const [tapped, setTapped] = useState<string | null>(null);
+  useEffect(() => { setTapped(null); }, [s.cover]);
+  const current = tapped ?? s.cover;
+  const choose = (file: string | null) => {
+    setTapped(file ?? s.deliverable[0] ?? null);
+    a.setCover(s, file);
+  };
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Cover photo</p>
+        {a.coverSavedId === s.id && (
+          <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-400">
+            <Check className="h-3 w-3" strokeWidth={3} />Cover updated
+          </span>
+        )}
+      </div>
+      <div className="grid max-h-72 grid-cols-6 gap-1 overflow-y-auto p-0.5 sm:grid-cols-8">
+        {s.deliverable.map((f) => {
+          const on = f === current;
+          return (
+            <button
+              key={f}
+              type="button"
+              onClick={() => choose(f === s.deliverable[0] ? null : f)}
+              aria-label={`Use ${f} as the cover`}
+              aria-pressed={on}
+              className={`relative aspect-square overflow-hidden rounded ${on ? 'ring-2 ring-primary-500 ring-offset-1 ring-offset-surface' : ''}`}
+            >
+              <AuthImage src={thumbUrl(`${s.albumPath}/Edited/${f}`)} alt="" className="h-full w-full bg-base" />
+              {on && (
+                <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary-500">
+                  <Check className="h-2.5 w-2.5 text-on-accent" strokeWidth={3.4} />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-gray-500">Tap a photo to make it the cover.</span>
+        <button type="button" onClick={() => choose(null)} className={BTN}>Use default</button>
+      </div>
     </div>
   );
 }

@@ -26,7 +26,7 @@ export const sharesController = {
 
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const body = (req.body ?? {}) as { albumPath?: unknown; cap?: unknown; password?: unknown; progressId?: unknown; kind?: unknown };
+      const body = (req.body ?? {}) as { albumPath?: unknown; cap?: unknown; password?: unknown; progressId?: unknown; kind?: unknown; hero?: unknown };
       if (typeof body.albumPath !== 'string') throw new AppError('albumPath is required', 400);
       const kind = body.kind === 'delivery' ? 'delivery' : 'proofing';
       if (kind === 'proofing' && (typeof body.cap !== 'number' || !Number.isFinite(body.cap))) {
@@ -35,7 +35,8 @@ export const sharesController = {
       const cap = typeof body.cap === 'number' && Number.isFinite(body.cap) ? body.cap : 0;
       if (typeof body.password !== 'string') throw new AppError('password is required', 400);
       const progressId = isValidProgressId(body.progressId) ? body.progressId : undefined;
-      sendSuccess(res, await sharesService.create(body.albumPath, cap, body.password, progressId, kind), 201);
+      const hero = typeof body.hero === 'string' ? body.hero : undefined;
+      sendSuccess(res, await sharesService.create(body.albumPath, cap, body.password, progressId, kind, hero), 201);
     } catch (err) {
       next(err);
     }
@@ -52,6 +53,17 @@ export const sharesController = {
   async enableDelivery(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       sendSuccess(res, await sharesService.enableDelivery(req.params.id));
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /** Set the delivery page cover; { file: null } resets to the default. */
+  async setHero(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = (req.body ?? {}) as { file?: unknown };
+      if (body.file !== null && typeof body.file !== 'string') throw new AppError('file must be a filename or null', 400);
+      sendSuccess(res, await sharesService.setHero(req.params.id, body.file));
     } catch (err) {
       next(err);
     }

@@ -24,6 +24,7 @@ owner.get('/', requireAuth, sharesController.list);
 owner.get('/progress/:progressId', requireAuth, sharesController.progress);
 owner.post('/:id/delivery', requireAuth, sharesController.enableDelivery);
 owner.post('/:id/refresh', requireAuth, sharesController.refresh);
+owner.post('/:id/hero', requireAuth, sharesController.setHero);
 owner.delete('/:id', requireAuth, sharesController.revoke);
 
 /**

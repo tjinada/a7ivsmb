@@ -48,6 +48,14 @@ function deliverable(rec: ShareRecord): string[] {
   return kindOf(rec) === 'delivery' ? rec.items : finalOf(rec);
 }
 
+/** The delivery page's hero: the owner's chosen cover while it's still one
+ *  the client gets, else the first of those. Null before delivery. */
+function heroOf(rec: ShareRecord): string | null {
+  if (rec.phase !== 'delivery') return null;
+  const files = deliverable(rec);
+  return rec.hero && files.includes(rec.hero) ? rec.hero : files[0] ?? null;
+}
+
 /** Keep only known, unique filenames, in the order given. */
 function dedupeKnown(files: unknown, known: Set<string>): string[] {
   const out: string[] = [];
@@ -254,7 +262,7 @@ function toSummary(rec: ShareRecord): ShareSummary {
     kind: kindOf(rec),
     phase: rec.phase,
     previewCount: rec.items.length,
-    cover: rec.items[0] ?? null,
+    cover: heroOf(rec) ?? rec.items[0] ?? null,
     selectedCount: rec.selections.length,
     selections: [...rec.selections],
     finalCount: finalOf(rec).length,
@@ -316,6 +324,7 @@ function toPublicState(rec: ShareRecord, downloadBytes?: number): SharePublicSta
     selectedCount: rec.selections.length,
     finalCount: finalOf(rec).length,
     items,
+    hero: heroOf(rec),
     ...(downloadBytes !== undefined ? { downloadBytes } : {}),
   };
 }
@@ -363,7 +372,7 @@ export const sharesService = {
   /** Create a share from an album's Edited/ JPGs. Generates the previews now.
    *  A 'proofing' share starts the pick-and-submit flow; a 'delivery' share is
    *  born downloadable (no cap, unwatermarked previews). */
-  async create(albumPath: string, cap: number, password: string, progressId?: string, kind: ShareKind = 'proofing'): Promise<ShareCreateResult> {
+  async create(albumPath: string, cap: number, password: string, progressId?: string, kind: ShareKind = 'proofing', hero?: string): Promise<ShareCreateResult> {
     await loadShares();
     if (typeof albumPath !== 'string' || !albumPath.startsWith('Albums/')) {
       throw new AppError('A valid album path is required', 400);
@@ -379,6 +388,11 @@ export const sharesService = {
     const editedJpgs = await listEditedJpgs(albumPath);
     if (editedJpgs.length === 0) {
       throw new AppError('This album has no edited JPGs to share (Edited/ is empty)', 400);
+    }
+    // A cover is only offered on download-everything links (a picking link's
+    // client may not choose it); checked before the slow preview render.
+    if (hero !== undefined && (!isDelivery || !editedJpgs.includes(hero))) {
+      throw new AppError('The cover photo must be one of this album\'s edited photos', 400);
     }
 
     const id = newId();
@@ -400,11 +414,32 @@ export const sharesService = {
       items,
       dims: dimsOf(rendered),
       selections: [],
+      ...(hero !== undefined ? { hero } : {}),
       createdAt: Date.now(),
       submittedAt: null,
     };
     await putShare(rec);
     return toSummary(rec);
+  },
+
+  /** Set (or with null, reset) the cover shown as the delivery page hero.
+   *  Only once the link delivers, and only to a photo the client gets. */
+  async setHero(id: string, file: string | null): Promise<ShareSummary> {
+    await loadShares();
+    const rec = getShareById(id);
+    if (!rec) throw new AppError('Share not found', 404);
+    if (rec.phase !== 'delivery') {
+      throw new AppError('A cover can be chosen once the photos are delivered', 409);
+    }
+    if (file !== null) {
+      assertPlainFilename(file);
+      if (!deliverable(rec).includes(file)) throw new AppError('That photo is not on this link', 400);
+    }
+    const next: ShareRecord = { ...rec };
+    if (file === null) delete next.hero;
+    else next.hero = file;
+    await putShare(next);
+    return toSummary(next);
   },
 
   /** All shares, newest first (owner dashboard). */

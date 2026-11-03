@@ -577,7 +577,7 @@
     app.replaceChildren(el(
       '<div class="dv">'
       + '<header class="hero">'
-      + (files.length ? '<img class="hero-img" alt="" fetchpriority="high" src="' + previewUrl(files[0].file) + '"/>' : '')
+      + (files.length ? '<img class="hero-img" alt="" fetchpriority="high" src="' + previewUrl(state.hero || files[0].file) + '"/>' : '')
       + (brand ? '<div class="hero-brand">' + brand + '</div>' : '')
       + '<div class="hero-text"><h1>' + esc(state.title) + '</h1>' + (date ? '<p>' + esc(date) + '</p>' : '') + '</div>'
       + '</header>'

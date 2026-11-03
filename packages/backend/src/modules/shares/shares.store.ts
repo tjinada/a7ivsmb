@@ -25,6 +25,9 @@ export interface ShareRecord {
   /** Client's final picks (subset of selections; capped). Absent on records
    *  from before Phase 7b: read as [] while proofing, else as `selections`. */
   final?: string[];
+  /** Owner-chosen cover for the delivery page hero (an item filename).
+   *  Absent = the first delivered photo. Ignored if no longer delivered. */
+  hero?: string;
   createdAt: number;        // epoch ms
   submittedAt: number | null;
 }

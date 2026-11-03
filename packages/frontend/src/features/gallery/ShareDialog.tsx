@@ -1,10 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Share2, Copy, Check, ExternalLink } from 'lucide-react';
 import type { ApiResponse, ShareCreateResult, ShareKind } from '@sonycam/shared';
 import { api } from '@/api/client';
 import { newProgressId, useShareProgress } from './useShareProgress';
 import { shareMessage } from './shareMessage';
+import { useBrowse } from './api';
+import { AuthImage } from './AuthImage';
+import { thumbUrl } from './mediaUrl';
+
+/** The server's order for a link's photos (natural, case-insensitive). */
+const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 
 /**
  * Create a password-protected client proofing link from an album. The link
@@ -28,6 +34,18 @@ export function ShareDialog({
   const [created, setCreated] = useState<ShareCreateResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [progressId, setProgressId] = useState<string | null>(null);
+  // Cover for a Download all link: null = the first photo (the default).
+  const [hero, setHero] = useState<string | null>(null);
+  const [pickingCover, setPickingCover] = useState(false);
+  const edited = useBrowse(`${albumPath}/Edited`, kind === 'delivery', { retry: false });
+  const editedNames = useMemo(
+    () => (edited.data?.items ?? [])
+      .map((it) => it.name)
+      .filter((n) => !n.startsWith('.') && /\.jpe?g$/i.test(n))
+      .sort(byName),
+    [edited.data],
+  );
+  const cover = hero ?? editedNames[0];
 
   const createMut = useMutation({
     mutationFn: async (pid: string): Promise<ShareCreateResult> => {
@@ -37,6 +55,7 @@ export function ShareDialog({
         password,
         progressId: pid,
         kind,
+        ...(kind === 'delivery' && hero ? { hero } : {}),
       });
       if (!res.data.data) throw new Error('Unexpected response');
       return res.data.data;
@@ -149,6 +168,65 @@ export function ShareDialog({
               className="w-full rounded-lg border border-border bg-base px-3 py-2 text-sm text-gray-100 outline-none placeholder:text-gray-600 focus:border-primary-500"
             />
 
+            {kind === 'delivery' && cover && (
+              <>
+                <div className="mb-1.5 mt-4 flex items-baseline justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Cover photo</p>
+                  {pickingCover && hero && (
+                    <button type="button" onClick={() => setHero(null)} className="text-xs font-medium text-primary-400 hover:text-primary-300">
+                      Use first photo
+                    </button>
+                  )}
+                </div>
+                {!pickingCover ? (
+                  <div className="flex items-center gap-3 rounded-lg border border-border bg-base p-2">
+                    <AuthImage src={thumbUrl(`${albumPath}/Edited/${cover}`)} alt="" className="h-14 w-14 flex-none overflow-hidden rounded-md bg-surface" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-gray-200">{hero ?? 'First photo'}</p>
+                      <p className="text-xs text-gray-500">{hero ? 'Shown at the top of their gallery' : 'Default · shown at the top of their gallery'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPickingCover(true)}
+                      disabled={createMut.isPending}
+                      className="flex-none rounded-lg border border-border-strong px-3 py-2 text-xs font-medium text-gray-200 transition hover:bg-border disabled:opacity-50"
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid max-h-64 grid-cols-4 gap-1.5 overflow-y-auto p-0.5">
+                      {editedNames.map((n) => {
+                        const on = n === cover;
+                        return (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setHero(n === editedNames[0] ? null : n)}
+                            disabled={createMut.isPending}
+                            aria-label={`Use ${n} as the cover`}
+                            aria-pressed={on}
+                            className={`relative aspect-square overflow-hidden rounded-md ${on ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-surface' : ''}`}
+                          >
+                            <AuthImage src={thumbUrl(`${albumPath}/Edited/${n}`)} alt="" className="h-full w-full bg-base" />
+                            {on && (
+                              <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary-500">
+                                <Check className="h-3 w-3 text-on-accent" strokeWidth={3} />
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500">
+                      {hero ? 'This photo will be the banner on their gallery.' : 'First photo (default). Tap another to use it instead.'}
+                    </p>
+                  </>
+                )}
+              </>
+            )}
+
             {errorMsg && <p className="mt-3 text-sm text-red-400">{errorMsg}</p>}
 
             {createMut.isPending && (
@@ -222,7 +300,7 @@ export function ShareDialog({
             </div>
 
             <a
-              href={created.url}
+              href={`${created.url}?preview`}
               target="_blank"
               rel="noreferrer"
               className="mt-3 flex items-center justify-center gap-1.5 text-xs text-primary-400 transition hover:text-primary-300"

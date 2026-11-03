@@ -26,6 +26,12 @@ export function useShareActions() {
     onError: () => toast.error('Could not refresh previews'),
   });
   const refreshProgress = useShareProgress(refreshMut.variables?.pid ?? null, refreshMut.isPending).data;
+  const [coverSavedId, setCoverSavedId] = useState<string | null>(null);
+  const coverMut = useMutation({
+    mutationFn: ({ id, file }: { id: string; file: string | null }) => api.post(`/gallery/shares/${id}/hero`, { file }),
+    onSuccess: (_d, v) => { void invalidate(); flash(setCoverSavedId, v.id); },
+    onError: () => toast.error('Could not change the cover photo'),
+  });
   const revokeMut = useMutation({
     mutationFn: (id: string) => api.delete(`/gallery/shares/${id}`),
     onSuccess: () => void invalidate(),
@@ -59,6 +65,9 @@ export function useShareActions() {
     deliver: (s: ShareSummary) => deliveryMut.mutate(s.id),
     refresh: (s: ShareSummary) => refreshMut.mutate({ id: s.id, pid: newProgressId() }),
     revoke: (s: ShareSummary) => revokeMut.mutate(s.id),
+    /** Set the delivery page cover (null = the first delivered photo). */
+    setCover: (s: ShareSummary, file: string | null) => coverMut.mutate({ id: s.id, file }),
+    coverSavedId,
     refreshing: (s: ShareSummary) => refreshMut.isPending && refreshMut.variables?.id === s.id,
     refreshProgress,
     revoking: revokeMut.isPending,
