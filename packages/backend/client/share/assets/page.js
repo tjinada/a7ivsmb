@@ -785,10 +785,19 @@
       if (!lb) return;
       const file = lb.files[lb.idx];
       if (lb.img.dataset.file !== file) {
-        lb.img.dataset.file = file;
-        lb.img.classList.add('loading');
-        unzoom();
-        lb.img.src = previewUrl(file);
+        // A fresh <img> per photo rather than swapping src: iOS Safari can
+        // keep a reused, fading img's old size and draw a portrait inside
+        // the previous landscape's box (and vice versa).
+        const img = document.createElement('img');
+        img.className = 'lb-img loading';
+        img.alt = '';
+        img.dataset.file = file;
+        img.onload = () => img.classList.remove('loading');
+        img.ondblclick = (ev) => zoomAt(ev.clientX, ev.clientY);
+        img.src = previewUrl(file);
+        lb.img.replaceWith(img);
+        lb.img = img;
+        lb.zoomed = false;
         preload(lb.idx + 1);
         preload(lb.idx - 1);
       }
@@ -883,14 +892,12 @@
       document.body.style.overflow = 'hidden';
       lb = { files, idx, mode, el: node, img: node.querySelector('.lb-img'), zoomed: false, pushed: false };
 
-      lb.img.onload = () => lb && lb.img.classList.remove('loading');
       node.querySelector('.x').onclick = close;
       node.querySelector('.prev').onclick = () => step(-1);
       node.querySelector('.next').onclick = () => step(1);
       if (files.length < 2) node.querySelectorAll('.lb-nav').forEach((b) => { b.style.display = 'none'; });
       const stage = node.querySelector('.lb-stage');
       stage.onclick = (ev) => { if (ev.target === stage) close(); };
-      lb.img.ondblclick = (ev) => zoomAt(ev.clientX, ev.clientY);
 
       const act = node.querySelector('.btn.act');
       if (act) {
