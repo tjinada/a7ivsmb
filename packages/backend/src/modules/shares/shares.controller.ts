@@ -73,12 +73,19 @@ export const sharesController = {
     }
   },
 
-  /** Set the delivery page cover; { file: null } resets to the default. */
+  /** Set the delivery page cover; { file: null } resets to the default.
+   *  Optional focus { x, y } (0–100) is where the hero crop centres. */
   async setHero(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const body = (req.body ?? {}) as { file?: unknown };
+      const body = (req.body ?? {}) as { file?: unknown; focus?: unknown };
       if (body.file !== null && typeof body.file !== 'string') throw new AppError('file must be a filename or null', 400);
-      sendSuccess(res, await sharesService.setHero(req.params.id, body.file));
+      let focus: { x: number; y: number } | undefined;
+      if (body.focus !== undefined) {
+        const f = body.focus as { x?: unknown; y?: unknown } | null;
+        if (!f || typeof f.x !== 'number' || typeof f.y !== 'number') throw new AppError('focus must be { x, y }', 400);
+        focus = { x: f.x, y: f.y };
+      }
+      sendSuccess(res, await sharesService.setHero(req.params.id, body.file, focus));
     } catch (err) {
       next(err);
     }

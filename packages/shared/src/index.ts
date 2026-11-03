@@ -242,6 +242,7 @@ export interface ShareSummary {
   phase: SharePhase;
   previewCount: number;     // edited JPGs published as previews
   cover: string | null;     // card cover (in the album's Edited/): the delivery hero once delivering, else the first published
+  heroFocus: { x: number; y: number }; // where the delivery hero's crop centres (percent)
   selectedCount: number;    // shortlist size
   selections: string[];     // the client's shortlist (subset of previews)
   finalCount: number;       // final picks (the set that gets edited)
@@ -302,6 +303,7 @@ export interface SharePublicState {
   finalCount: number;       // final picks chosen so far
   items: SharePublicItem[];
   hero: string | null;      // delivery page banner photo (owner's cover or the first delivered); null before delivery
+  heroFocus: { x: number; y: number }; // hero crop centre, percent (CSS object-position)
   expiresAt: number | null; // epoch ms the link stops working; null = never
   downloadBytes?: number;   // delivery phase: total size of the downloadable originals
 }

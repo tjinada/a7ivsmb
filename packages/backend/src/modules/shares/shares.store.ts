@@ -28,6 +28,9 @@ export interface ShareRecord {
   /** Owner-chosen cover for the delivery page hero (an item filename).
    *  Absent = the first delivered photo. Ignored if no longer delivered. */
   hero?: string;
+  /** The spot on the cover to keep in view as the hero crops (percent of
+   *  width/height). Absent = the default; reset when the cover photo changes. */
+  heroFocus?: { x: number; y: number };
   /** When the client link stops working (epoch ms). Absent or null = never
    *  (records from before Phase 13 never expire). */
   expiresAt?: number | null;

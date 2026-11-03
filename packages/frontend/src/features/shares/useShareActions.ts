@@ -28,7 +28,8 @@ export function useShareActions() {
   const refreshProgress = useShareProgress(refreshMut.variables?.pid ?? null, refreshMut.isPending).data;
   const [coverSavedId, setCoverSavedId] = useState<string | null>(null);
   const coverMut = useMutation({
-    mutationFn: ({ id, file }: { id: string; file: string | null }) => api.post(`/gallery/shares/${id}/hero`, { file }),
+    mutationFn: ({ id, file, focus }: { id: string; file: string | null; focus?: { x: number; y: number } }) =>
+      api.post(`/gallery/shares/${id}/hero`, { file, ...(focus ? { focus } : {}) }),
     onSuccess: (_d, v) => { void invalidate(); flash(setCoverSavedId, v.id); },
     onError: () => toast.error('Could not change the cover photo'),
   });
@@ -71,8 +72,10 @@ export function useShareActions() {
     deliver: (s: ShareSummary) => deliveryMut.mutate(s.id),
     refresh: (s: ShareSummary) => refreshMut.mutate({ id: s.id, pid: newProgressId() }),
     revoke: (s: ShareSummary) => revokeMut.mutate(s.id),
-    /** Set the delivery page cover (null = the first delivered photo). */
-    setCover: (s: ShareSummary, file: string | null) => coverMut.mutate({ id: s.id, file }),
+    /** Set the delivery page cover (null = the first delivered photo) and,
+     *  optionally, where its crop centres (percent). */
+    setCover: (s: ShareSummary, file: string | null, focus?: { x: number; y: number }) =>
+      coverMut.mutate({ id: s.id, file, focus }),
     coverSavedId,
     /** Make the link last `days` from today (null = never). */
     setExpiry: (s: ShareSummary, days: number | null) => expiryMut.mutate({ id: s.id, days }),

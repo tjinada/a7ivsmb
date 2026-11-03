@@ -33,6 +33,16 @@ const EDITED_DIR = 'Edited';
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Life of a new link when the request doesn't say. */
 const DEFAULT_EXPIRY_DAYS = 30;
+/** Where the hero crop centres when the owner hasn't moved it (the client
+ *  page's long-standing `object-position: center 30%`). */
+const DEFAULT_FOCUS = { x: 50, y: 30 } as const;
+
+/** Validate a focal point: x and y as numbers 0–100 (rounded). */
+function checkFocus(f: { x: number; y: number }): { x: number; y: number } {
+  const ok = (v: number) => Number.isFinite(v) && v >= 0 && v <= 100;
+  if (!ok(f.x) || !ok(f.y)) throw new AppError('Cover position must be 0–100 on each axis', 400);
+  return { x: Math.round(f.x), y: Math.round(f.y) };
+}
 
 /** Range-check a link length: whole days 1–365, or null for never. */
 function checkDays(days: number | null): number | null {
@@ -297,6 +307,7 @@ function toSummary(rec: ShareRecord): ShareSummary {
     phase: rec.phase,
     previewCount: rec.items.length,
     cover: heroOf(rec) ?? rec.items[0] ?? null,
+    heroFocus: rec.heroFocus ?? { ...DEFAULT_FOCUS },
     selectedCount: rec.selections.length,
     selections: [...rec.selections],
     finalCount: finalOf(rec).length,
@@ -362,6 +373,7 @@ function toPublicState(rec: ShareRecord, downloadBytes?: number): SharePublicSta
     finalCount: finalOf(rec).length,
     items,
     hero: heroOf(rec),
+    heroFocus: rec.heroFocus ?? { ...DEFAULT_FOCUS },
     expiresAt: rec.expiresAt ?? null,
     ...(downloadBytes !== undefined ? { downloadBytes } : {}),
   };
@@ -463,9 +475,11 @@ export const sharesService = {
     return toSummary(rec);
   },
 
-  /** Set (or with null, reset) the cover shown as the delivery page hero.
-   *  Only once the link delivers, and only to a photo the client gets. */
-  async setHero(id: string, file: string | null): Promise<ShareSummary> {
+  /** Set (or with null, reset) the cover shown as the delivery page hero,
+   *  and optionally where its crop centres. Only once the link delivers, and
+   *  only to a photo the client gets. A different photo without a focus
+   *  resets the focus (a spot on one photo means nothing on another). */
+  async setHero(id: string, file: string | null, focus?: { x: number; y: number }): Promise<ShareSummary> {
     await loadShares();
     const rec = getShareById(id);
     if (!rec) throw new AppError('Share not found', 404);
@@ -479,6 +493,8 @@ export const sharesService = {
     const next: ShareRecord = { ...rec };
     if (file === null) delete next.hero;
     else next.hero = file;
+    if (focus !== undefined) next.heroFocus = checkFocus(focus);
+    else if (heroOf(next) !== heroOf(rec)) delete next.heroFocus;
     await putShare(next);
     return toSummary(next);
   },
@@ -553,6 +569,12 @@ export const sharesService = {
       selections: rec.selections.filter((f) => keep.has(f)),
       ...(rec.final ? { final: rec.final.filter((f) => keep.has(f)) } : {}),
     };
+    // The chosen cover is gone: fall back to the default, and drop its
+    // position too (it was a spot on that photo).
+    if (next.hero && !keep.has(next.hero)) {
+      delete next.hero;
+      delete next.heroFocus;
+    }
     await putShare(next);
     return toSummary(next);
   },

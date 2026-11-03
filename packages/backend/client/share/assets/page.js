@@ -567,6 +567,12 @@
     return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   }
 
+  /** The owner's chosen crop centre for the hero, as an object-position. */
+  function focusPct(f) {
+    const n = (v, d) => { const x = Number(v); return Number.isFinite(x) ? Math.min(100, Math.max(0, x)) : d; };
+    return f ? n(f.x, 50) + '% ' + n(f.y, 30) + '%' : '50% 30%';
+  }
+
   function renderDelivery() {
     // A download-everything share has no picks: every photo is downloadable.
     // A proofing share delivers only the client's final picks.
@@ -597,7 +603,12 @@
       + '</div>',
     ));
     const hero = app.querySelector('.hero-img');
-    if (hero) { hero.onload = () => hero.classList.add('ok'); if (hero.complete) hero.classList.add('ok'); }
+    if (hero) {
+      // Set via CSSOM, not a style attribute, so a strict CSP stays possible.
+      hero.style.objectPosition = focusPct(state.heroFocus);
+      hero.onload = () => hero.classList.add('ok');
+      if (hero.complete) hero.classList.add('ok');
+    }
 
     // One download button, chosen once: Save all to Photos where the share
     // sheet can take the files and the set is small enough, otherwise the ZIP.

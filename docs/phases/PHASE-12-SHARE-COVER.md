@@ -31,7 +31,20 @@ delivery page, instead of always the first photo by filename.
   `POST /api/gallery/shares/:id/hero { file | null }` (409 before delivery,
   400 if the file isn't delivered on that link).
 
+## Cover position (focal point)
+
+The hero crops differently per screen (tall on a phone, wide on a desktop), so
+the owner sets a focal point rather than a crop: `ShareRecord.heroFocus { x, y }`
+in percent, applied as the hero's `object-position` (set via CSSOM, keeping a
+strict CSP possible). Default 50/30 (the page's previous fixed value).
+
+- Set from the cover panel's *Position* section: tap/drag on the photo (or
+  arrow keys, Shift for bigger steps); saves on release; *Reset* = default.
+  Phone and Desktop previews crop like the client page.
+- `POST /:id/hero` takes optional `focus { x, y }` (0–100). A different photo
+  without a focus resets it; *Update photos* dropping the cover drops both.
+- `ShareSummary.heroFocus`, `SharePublicState.heroFocus`.
+
 ## Not in scope
 
-Crop position for portrait covers on the wide hero; per-album covers for the
-gallery's album cards.
+Zooming into the cover; per-album covers for the gallery's album cards.

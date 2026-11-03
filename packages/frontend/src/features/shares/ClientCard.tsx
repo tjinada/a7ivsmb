@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Copy, Check, Send, Loader2, MoreHorizontal, Heart, Download, RefreshCw, FolderOpen, Power, Eye, Sparkles,
@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import type { ShareSummary } from '@sonycam/shared';
 import { AuthImage } from '@/features/gallery/AuthImage';
-import { thumbUrl } from '@/features/gallery/mediaUrl';
+import { thumbUrl, previewUrl } from '@/features/gallery/mediaUrl';
 import { ConfirmDialog } from '@/features/gallery/ConfirmDialog';
 import { fmtAgo, fmtIn, EXPIRY_CHOICES } from '@/lib/dates';
 import type { useShareActions } from './useShareActions';
@@ -522,6 +522,85 @@ function CoverPanel({ share: s, actions: a }: { share: ShareSummary; actions: Ac
         <span className="text-[11px] text-gray-500">Tap a photo to make it the cover.</span>
         <button type="button" onClick={() => choose(null)} className={BTN}>Use default</button>
       </div>
+      {current && <CoverPosition share={s} actions={a} file={current} />}
+    </div>
+  );
+}
+
+const DEFAULT_FOCUS = { x: 50, y: 30 };
+
+/** Set the spot on the cover the client page keeps in view as it crops the
+ *  hero: tap or drag on the photo (or arrow keys); saves on release. Phone
+ *  and Desktop previews crop like the real page. */
+function CoverPosition({ share: s, actions: a, file }: { share: ShareSummary; actions: Actions; file: string }) {
+  const src = previewUrl(`${s.albumPath}/Edited/${file}`);
+  // While a different photo's save is in flight, s.heroFocus is still the old
+  // photo's: show the default until the server catches up.
+  const serverFocus = file === s.cover ? s.heroFocus : DEFAULT_FOCUS;
+  const [focus, setFocus] = useState(serverFocus);
+  useEffect(() => { setFocus(serverFocus); }, [serverFocus.x, serverFocus.y, file]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dragging = useRef(false);
+  const pos = `${focus.x}% ${focus.y}%`;
+
+  const clamp = (v: number) => Math.round(Math.min(100, Math.max(0, v)));
+  const at = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return { x: clamp(((e.clientX - r.left) / r.width) * 100), y: clamp(((e.clientY - r.top) / r.height) * 100) };
+  };
+  const save = (f: { x: number; y: number }) => a.setCover(s, file, f);
+  const onKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? 10 : 2;
+    const moves: Record<string, [number, number]> = {
+      ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step],
+    };
+    const d = moves[e.key];
+    if (!d) return;
+    e.preventDefault();
+    const f = { x: clamp(focus.x + d[0]), y: clamp(focus.y + d[1]) };
+    setFocus(f);
+    save(f);
+  };
+
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Position</p>
+        <button type="button" onClick={() => { setFocus(DEFAULT_FOCUS); save(DEFAULT_FOCUS); }} className="text-[11px] font-medium text-primary-400 hover:text-primary-300">
+          Reset
+        </button>
+      </div>
+      <div className="flex flex-wrap items-start gap-4">
+        <div
+          role="slider"
+          tabIndex={0}
+          aria-label="Cover focus point: tap or drag on the photo, or use the arrow keys"
+          aria-valuetext={`${focus.x}% across, ${focus.y}% down`}
+          className="relative w-full max-w-[16rem] cursor-crosshair touch-none select-none overflow-hidden rounded-md outline-none ring-primary-500 focus-visible:ring-2"
+          onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); dragging.current = true; setFocus(at(e)); }}
+          onPointerMove={(e) => { if (dragging.current) setFocus(at(e)); }}
+          onPointerUp={(e) => { if (!dragging.current) return; dragging.current = false; const f = at(e); setFocus(f); save(f); }}
+          onPointerCancel={() => { dragging.current = false; setFocus(serverFocus); }}
+          onKeyDown={onKey}
+        >
+          <img src={src} alt="" draggable={false} className="pointer-events-none block h-auto w-full" />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,.6),0_2px_6px_rgba(0,0,0,.5)]"
+            style={{ left: `${focus.x}%`, top: `${focus.y}%` }}
+          />
+        </div>
+        <div className="flex items-end gap-3">
+          <figure className="m-0">
+            <img src={src} alt="" className="h-28 w-[4.5rem] rounded object-cover" style={{ objectPosition: pos }} />
+            <figcaption className="mt-1 text-center text-[10px] text-gray-500">Phone</figcaption>
+          </figure>
+          <figure className="m-0">
+            <img src={src} alt="" className="h-16 w-36 rounded object-cover" style={{ objectPosition: pos }} />
+            <figcaption className="mt-1 text-center text-[10px] text-gray-500">Desktop</figcaption>
+          </figure>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] text-gray-500">Tap or drag on the photo to keep that spot in view. Saves when you let go.</p>
     </div>
   );
 }
