@@ -16,6 +16,16 @@ function attachment(name: string): string {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${utf8}`;
 }
 
+/** An expiry length from a request body: a number of days or null (never);
+ *  undefined only where omitting it is allowed (create = the default). */
+function expiryArg(v: unknown, optional: true): number | null | undefined;
+function expiryArg(v: unknown, optional: false): number | null;
+function expiryArg(v: unknown, optional: boolean): number | null | undefined {
+  if (v === undefined && optional) return undefined;
+  if (v === null || typeof v === 'number') return v;
+  throw new AppError('Expiry must be a number of days or null', 400);
+}
+
 /** Block caches on the gate, the JSON state, and all downloads. */
 function noStore(res: Response): void {
   res.set('Cache-Control', 'no-store');
@@ -26,7 +36,9 @@ export const sharesController = {
 
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const body = (req.body ?? {}) as { albumPath?: unknown; cap?: unknown; password?: unknown; progressId?: unknown; kind?: unknown; hero?: unknown };
+      const body = (req.body ?? {}) as {
+        albumPath?: unknown; cap?: unknown; password?: unknown; progressId?: unknown; kind?: unknown; hero?: unknown; expiresInDays?: unknown;
+      };
       if (typeof body.albumPath !== 'string') throw new AppError('albumPath is required', 400);
       const kind = body.kind === 'delivery' ? 'delivery' : 'proofing';
       if (kind === 'proofing' && (typeof body.cap !== 'number' || !Number.isFinite(body.cap))) {
@@ -36,7 +48,10 @@ export const sharesController = {
       if (typeof body.password !== 'string') throw new AppError('password is required', 400);
       const progressId = isValidProgressId(body.progressId) ? body.progressId : undefined;
       const hero = typeof body.hero === 'string' ? body.hero : undefined;
-      sendSuccess(res, await sharesService.create(body.albumPath, cap, body.password, progressId, kind, hero), 201);
+      const expiryDays = expiryArg(body.expiresInDays, true);
+      sendSuccess(res, await sharesService.create({
+        albumPath: body.albumPath, cap, password: body.password, progressId, kind, hero, expiryDays,
+      }), 201);
     } catch (err) {
       next(err);
     }
@@ -64,6 +79,16 @@ export const sharesController = {
       const body = (req.body ?? {}) as { file?: unknown };
       if (body.file !== null && typeof body.file !== 'string') throw new AppError('file must be a filename or null', 400);
       sendSuccess(res, await sharesService.setHero(req.params.id, body.file));
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /** Change how long a link works, from now: { days: number | null }. */
+  async setExpiry(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = (req.body ?? {}) as { days?: unknown };
+      sendSuccess(res, await sharesService.setExpiry(req.params.id, expiryArg(body.days, false)));
     } catch (err) {
       next(err);
     }

@@ -48,3 +48,21 @@ export function fmtAgo(ms: number): string {
   if (d < 14) return `${d} d ago`;
   return `${Math.floor(d / 7)} w ago`;
 }
+
+/** "in 12 d" style time until epoch ms (for a future moment). */
+export function fmtIn(ms: number): string {
+  const m = Math.max(0, Math.ceil((ms - Date.now()) / 60000));
+  if (m < 60) return `${m} min`;
+  const h = Math.ceil(m / 60);
+  if (h < 24) return `${h} h`;
+  return `${Math.ceil(h / 24)} d`;
+}
+
+/** Link-expiry choices offered in the owner app (days; null = never). */
+export const EXPIRY_CHOICES: { days: number | null; label: string }[] = [
+  { days: 7, label: '7 days' },
+  { days: 14, label: '14 days' },
+  { days: 30, label: '30 days' },
+  { days: 90, label: '90 days' },
+  { days: null, label: 'Never' },
+];

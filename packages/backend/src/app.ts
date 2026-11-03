@@ -64,7 +64,13 @@ app.get('/s/:slug', async (req, res, next) => {
     // rather than a password gate that can never be unlocked.
     const meta = await sharePageMeta(req.params.slug);
     if (!meta) {
-      res.status(404).type('html').send(await renderInactivePage());
+      res.status(404).type('html').send(await renderInactivePage('gone'));
+      return;
+    }
+    // Expired links keep their data (the owner can extend them) but the
+    // client gets a plain "expired" page, not a password gate.
+    if (meta.expired) {
+      res.status(410).type('html').send(await renderInactivePage('expired'));
       return;
     }
     res.type('html').send(await renderSharePage(req.params.slug, meta));

@@ -28,8 +28,19 @@ export interface ShareRecord {
   /** Owner-chosen cover for the delivery page hero (an item filename).
    *  Absent = the first delivered photo. Ignored if no longer delivered. */
   hero?: string;
+  /** When the client link stops working (epoch ms). Absent or null = never
+   *  (records from before Phase 13 never expire). */
+  expiresAt?: number | null;
+  /** The length chosen for the link, in days; null = never. Delivery
+   *  restarts the clock with it. */
+  expiryDays?: number | null;
   createdAt: number;        // epoch ms
   submittedAt: number | null;
+}
+
+/** True once a link's expiry has passed. */
+export function isExpired(rec: ShareRecord, now = Date.now()): boolean {
+  return rec.expiresAt != null && now >= rec.expiresAt;
 }
 
 type Shares = Record<string, ShareRecord>;

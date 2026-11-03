@@ -87,13 +87,31 @@ export async function renderSharePage(slug: string, meta: { albumName: string; k
   });
 }
 
-/** Static page for a link that no longer resolves to a share (revoked or never
- *  existed — indistinguishable once the record is deleted). No JS, no slug
- *  echo; same styling as the gate so it reads as part of the same product. */
-export async function renderInactivePage(): Promise<string> {
+const INACTIVE_COPY = {
+  // Revoked or never existed (indistinguishable once the record is deleted).
+  gone: {
+    title: 'Link not active',
+    heading: 'This link is no longer active',
+    message: 'The gallery it pointed to has been closed. If you were expecting photos, get in touch with whoever sent you the link.',
+  },
+  expired: {
+    title: 'Link expired',
+    heading: 'This link has expired',
+    message: 'The gallery is no longer available here. If you still need your photos, ask whoever sent you the link for a new one.',
+  },
+} as const;
+
+/** Static page for a link that doesn't open: gone, or past its expiry. No JS,
+ *  no slug echo; same styling as the gate so it reads as part of the same
+ *  product. */
+export async function renderInactivePage(reason: keyof typeof INACTIVE_COPY): Promise<string> {
   const brand = escAttr(config.shares.brandName);
+  const copy = INACTIVE_COPY[reason];
   return fill(await template('inactive.html'), {
     BRAND_LINE: brand ? `<div class="brand">${brand}</div>` : '',
+    TITLE: copy.title,
+    HEADING: copy.heading,
+    MESSAGE: copy.message,
     ASSET_V: SHARE_ASSET_VERSION,
   });
 }

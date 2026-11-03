@@ -2,16 +2,17 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Copy, Check, Send, Loader2, MoreHorizontal, Heart, Download, RefreshCw, FolderOpen, Power, Eye, Sparkles,
-  Activity, ExternalLink, Image as ImageIcon,
+  Activity, ExternalLink, Image as ImageIcon, Clock,
 } from 'lucide-react';
 import type { ShareSummary } from '@sonycam/shared';
 import { AuthImage } from '@/features/gallery/AuthImage';
 import { thumbUrl } from '@/features/gallery/mediaUrl';
 import { ConfirmDialog } from '@/features/gallery/ConfirmDialog';
-import { fmtAgo } from '@/lib/dates';
+import { fmtAgo, fmtIn, EXPIRY_CHOICES } from '@/lib/dates';
 import type { useShareActions } from './useShareActions';
 
 type Actions = ReturnType<typeof useShareActions>;
+type PanelKind = 'activity' | 'cover' | 'expiry';
 
 /** Where one link stands. needs-you: the client sent picks; picking: still
  *  choosing; delivered: finals released, or a download-all link. */
@@ -52,9 +53,13 @@ export function groupByAlbum(shares: ShareSummary[]): AlbumGroup[] {
     .sort((a, b) => RANK[a.state] - RANK[b.state] || b.lastActivity - a.lastActivity);
 }
 
+/** Past its expiry: the client can't open it, but nothing's deleted. */
+const isLinkExpired = (s: ShareSummary) => s.expiresAt !== null && s.expiresAt <= Date.now();
+
 function statusPill(g: AlbumGroup): { text: string; cls: string } {
   const s = g.links[0];
   if (g.state === 'needs-you') return { text: `Picks in · ${s.finalCount} of ${s.cap}`, cls: 'bg-primary-500/15 text-primary-400' };
+  if (g.links.every(isLinkExpired)) return { text: 'Expired', cls: 'bg-red-500/10 text-red-400' };
   if (g.state === 'picking') {
     return { text: s.selectedCount > 0 ? `Picking · ${s.selectedCount} shortlisted` : 'Picking · no picks yet', cls: 'bg-white/[0.07] text-gray-300' };
   }
@@ -66,6 +71,15 @@ function linkLine(s: ShareSummary): string {
   if (s.phase === 'delivery') return `Picking link · ${s.finalCount} photos delivered`;
   if (s.phase === 'submitted') return `Picking link · ${s.finalCount} of ${s.cap} picked ${fmtAgo(s.submittedAt ?? s.createdAt)}`;
   return `Picking link · up to ${s.cap} · sent ${fmtAgo(s.createdAt)} · ${s.finalCount} final picks`;
+}
+
+/** " · expires in 12 d" after a link line; red once expired; nothing for
+ *  links that never expire. */
+function ExpiryNote({ s }: { s: ShareSummary }) {
+  if (s.expiresAt === null) return null;
+  return isLinkExpired(s)
+    ? <span className="text-red-400"> · expired {fmtAgo(s.expiresAt)}</span>
+    : <span> · expires in {fmtIn(s.expiresAt)}</span>;
 }
 
 /** Delivered files the client has downloaded (a finished ZIP counts for all). */
@@ -102,12 +116,12 @@ export function ClientCard({
   const proofing = g.links.find((s) => s.kind !== 'delivery');
   const [picksOpen, setPicksOpen] = useState(defaultOpen && !!proofing);
   const [revoking, setRevoking] = useState<ShareSummary | null>(null);
-  // One link's Activity or cover panel at a time.
-  const [panel, setPanel] = useState<{ id: string; kind: 'activity' | 'cover' } | null>(null);
+  // One link's Activity, cover or expiry panel at a time.
+  const [panel, setPanel] = useState<{ id: string; kind: PanelKind } | null>(null);
   const panelShare = panel ? g.links.find((s) => s.id === panel.id) : undefined;
-  const togglePanel = (s: ShareSummary, kind: 'activity' | 'cover') =>
+  const togglePanel = (s: ShareSummary, kind: PanelKind) =>
     setPanel((p) => (p && p.id === s.id && p.kind === kind ? null : { id: s.id, kind }));
-  const panelOpen = (s: ShareSummary, kind: 'activity' | 'cover') => panel?.id === s.id && panel.kind === kind;
+  const panelOpen = (s: ShareSummary, kind: PanelKind) => panel?.id === s.id && panel.kind === kind;
   const pill = statusPill(g);
   const cover = g.links.find((s) => s.cover)?.cover;
   const needsYou = g.state === 'needs-you' && proofing;
@@ -146,6 +160,8 @@ export function ClientCard({
         activityOpen={panelOpen(s, 'activity')}
         onCover={s.deliverable.length > 0 ? () => togglePanel(s, 'cover') : undefined}
         coverOpen={panelOpen(s, 'cover')}
+        onExpiry={() => togglePanel(s, 'expiry')}
+        expiryOpen={panelOpen(s, 'expiry')}
         onTurnOff={() => setRevoking(s)}
       />
     </>
@@ -175,7 +191,7 @@ export function ClientCard({
             </Link>
           </div>
           <p className="mt-1 truncate text-xs text-gray-500">
-            {compact ? linkLine(g.links[0]) : `${g.links.length} link${g.links.length === 1 ? '' : 's'} · last activity ${fmtAgo(g.lastActivity)}`}
+            {compact ? <>{linkLine(g.links[0])}<ExpiryNote s={g.links[0]} /></> : `${g.links.length} link${g.links.length === 1 ? '' : 's'} · last activity ${fmtAgo(g.lastActivity)}`}
           </p>
           {compact && <p className="mt-0.5 truncate text-[11px] text-gray-500">{activityLine(g.links[0])}</p>}
           {/* On phones the pill sits under the name. */}
@@ -210,7 +226,7 @@ export function ClientCard({
                 {s.kind === 'delivery' ? <Download className="h-3.5 w-3.5" /> : <Heart className="h-3.5 w-3.5" />}
               </span>
               <span className="min-w-0 flex-1 leading-snug">
-                <span className="block text-xs text-gray-300 sm:truncate">{linkLine(s)}</span>
+                <span className="block text-xs text-gray-300 sm:truncate">{linkLine(s)}<ExpiryNote s={s} /></span>
                 <span className="block text-[11px] text-gray-500 sm:truncate">{activityLine(s)}</span>
               </span>
               {controls(s)}
@@ -244,6 +260,7 @@ export function ClientCard({
       {picksOpen && proofing && <PicksPanel share={proofing} actions={a} />}
       {panelShare && panel?.kind === 'activity' && <ActivityPanel share={panelShare} />}
       {panelShare && panel?.kind === 'cover' && <CoverPanel share={panelShare} actions={a} />}
+      {panelShare && panel?.kind === 'expiry' && <ExpiryPanel share={panelShare} actions={a} />}
       </div>
 
       {revoking && (
@@ -260,9 +277,11 @@ export function ClientCard({
   );
 }
 
-/** ⋯ for one link: view picks or activity, choose the cover, update its
- *  photos, open as the client, open the album, turn off. */
-function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen, onActivity, activityOpen, onCover, coverOpen, onTurnOff }: {
+/** ⋯ for one link: view picks or activity, choose the cover, change the
+ *  expiry, update its photos, open as the client, open the album, turn off. */
+function LinkMenu({
+  share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen, onActivity, activityOpen, onCover, coverOpen, onExpiry, expiryOpen, onTurnOff,
+}: {
   share: ShareSummary;
   busy: boolean;
   editedInAlbum?: number;
@@ -274,6 +293,8 @@ function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen,
   /** Only once the link delivers (the cover is the delivery page hero). */
   onCover?: () => void;
   coverOpen: boolean;
+  onExpiry: () => void;
+  expiryOpen: boolean;
   onTurnOff: () => void;
 }) {
   // The menu floats (position: fixed) so a fixed-height card that scrolls
@@ -292,7 +313,7 @@ function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen,
     if (open) { close(); return; }
     const r = e.currentTarget.getBoundingClientRect();
     const right = window.innerWidth - r.right;
-    setPos(window.innerHeight - r.bottom < 360 ? { bottom: window.innerHeight - r.top + 4, right } : { top: r.bottom + 4, right });
+    setPos(window.innerHeight - r.bottom < 400 ? { bottom: window.innerHeight - r.top + 4, right } : { top: r.bottom + 4, right });
   };
   const pick = (fn: () => void) => () => { close(); fn(); };
   const item = 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-gray-200 transition hover:bg-white/[0.06] disabled:opacity-50';
@@ -323,6 +344,9 @@ function LinkMenu({ share: s, busy, editedInAlbum, onUpdate, onPicks, picksOpen,
                 <ImageIcon className="h-4 w-4 text-gray-400" />{coverOpen ? 'Hide cover photo' : 'Choose cover photo'}
               </button>
             )}
+            <button type="button" onClick={pick(onExpiry)} className={item}>
+              <Clock className="h-4 w-4 text-gray-400" />{expiryOpen ? 'Hide expiry' : 'Change expiry'}
+            </button>
             {/* ?preview marks this browser so your own visits aren't counted. */}
             <a href={`${s.url}?preview`} target="_blank" rel="noopener noreferrer" onClick={close} className={item}>
               <ExternalLink className="h-4 w-4 text-gray-400" />Open as client
@@ -498,6 +522,40 @@ function CoverPanel({ share: s, actions: a }: { share: ShareSummary; actions: Ac
         <span className="text-[11px] text-gray-500">Tap a photo to make it the cover.</span>
         <button type="button" onClick={() => choose(null)} className={BTN}>Use default</button>
       </div>
+    </div>
+  );
+}
+
+/** When a link stops working, and buttons to make it last N days from today
+ *  (or never). Also how an expired link is brought back: nothing was deleted. */
+function ExpiryPanel({ share: s, actions: a }: { share: ShareSummary; actions: Actions }) {
+  const expired = isLinkExpired(s);
+  const when = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const status = s.expiresAt === null
+    ? 'Never expires'
+    : expired ? `Expired ${when(s.expiresAt)}` : `Expires ${when(s.expiresAt)} · in ${fmtIn(s.expiresAt)}`;
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Link expiry</p>
+        {a.expirySavedId === s.id && (
+          <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-400">
+            <Check className="h-3 w-3" strokeWidth={3} />Expiry updated
+          </span>
+        )}
+      </div>
+      <p className={`text-xs ${expired ? 'text-red-400' : 'text-gray-300'}`}>{status}</p>
+      <p className="mb-1.5 mt-2.5 text-[11px] text-gray-500">{expired ? 'Bring it back for' : 'Make it last'}, from today:</p>
+      <div className="flex flex-wrap gap-1.5">
+        {EXPIRY_CHOICES.map((c) => (
+          <button key={c.label} type="button" onClick={() => a.setExpiry(s, c.days)} disabled={a.expiryPending(s)} className={BTN}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+      {expired && (
+        <p className="mt-2 text-[11px] text-gray-500">Picks, activity and the cover are all kept, so extending brings the same link back.</p>
+      )}
     </div>
   );
 }

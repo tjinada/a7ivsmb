@@ -20,6 +20,7 @@ import {
   getShareBySlug,
   putShare,
   deleteShare,
+  isExpired,
 } from './shares.store.js';
 import { hashPassword, verifyPassword, newId, newSlug } from './shares.auth.js';
 import { progressStart, progressTick, progressEnd } from './shares.progress.js';
@@ -29,6 +30,35 @@ import { albumTitle } from './albumTitle.js';
 
 const JPG_EXTS = new Set(['.jpg', '.jpeg']);
 const EDITED_DIR = 'Edited';
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Life of a new link when the request doesn't say. */
+const DEFAULT_EXPIRY_DAYS = 30;
+
+/** Range-check a link length: whole days 1–365, or null for never. */
+function checkDays(days: number | null): number | null {
+  if (days === null) return null;
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    throw new AppError('Expiry must be 1–365 days, or never', 400);
+  }
+  return days;
+}
+
+/** Record fields for a link that lasts `days` from `from` (null = never). */
+function expiryFields(days: number | null, from = Date.now()): Pick<ShareRecord, 'expiresAt' | 'expiryDays'> {
+  return { expiryDays: days, expiresAt: days === null ? null : from + days * DAY_MS };
+}
+
+export interface CreateShareInput {
+  albumPath: string;
+  cap: number;
+  password: string;
+  progressId?: string;
+  kind: ShareKind;
+  /** Cover for the delivery page (Download all links only). */
+  hero?: string;
+  /** Link length in days; null = never; undefined = the default. */
+  expiryDays?: number | null;
+}
 
 /** A record's kind; pre-kind records on disk are proofing shares. */
 function kindOf(rec: ShareRecord): ShareKind {
@@ -269,6 +299,7 @@ function toSummary(rec: ShareRecord): ShareSummary {
     final: [...finalOf(rec)],
     deliverable: rec.phase === 'delivery' ? [...deliverable(rec)] : [],
     activity: activityOf(rec.slug),
+    expiresAt: rec.expiresAt ?? null,
     url: publicUrl(rec.slug),
     createdAt: rec.createdAt,
     submittedAt: rec.submittedAt,
@@ -279,6 +310,8 @@ function toSummary(rec: ShareRecord): ShareSummary {
 function requireBySlug(slug: string): ShareRecord {
   const rec = getShareBySlug(slug);
   if (!rec) throw new AppError('Share not found', 404);
+  // Every public route comes through here, so this is the one expiry gate.
+  if (isExpired(rec)) throw new AppError('This link has expired', 410);
   return rec;
 }
 
@@ -325,6 +358,7 @@ function toPublicState(rec: ShareRecord, downloadBytes?: number): SharePublicSta
     finalCount: finalOf(rec).length,
     items,
     hero: heroOf(rec),
+    expiresAt: rec.expiresAt ?? null,
     ...(downloadBytes !== undefined ? { downloadBytes } : {}),
   };
 }
@@ -372,8 +406,10 @@ export const sharesService = {
   /** Create a share from an album's Edited/ JPGs. Generates the previews now.
    *  A 'proofing' share starts the pick-and-submit flow; a 'delivery' share is
    *  born downloadable (no cap, unwatermarked previews). */
-  async create(albumPath: string, cap: number, password: string, progressId?: string, kind: ShareKind = 'proofing', hero?: string): Promise<ShareCreateResult> {
+  async create(input: CreateShareInput): Promise<ShareCreateResult> {
+    const { albumPath, cap, password, progressId, kind, hero } = input;
     await loadShares();
+    const days = checkDays(input.expiryDays === undefined ? DEFAULT_EXPIRY_DAYS : input.expiryDays);
     if (typeof albumPath !== 'string' || !albumPath.startsWith('Albums/')) {
       throw new AppError('A valid album path is required', 400);
     }
@@ -415,6 +451,7 @@ export const sharesService = {
       dims: dimsOf(rendered),
       selections: [],
       ...(hero !== undefined ? { hero } : {}),
+      ...expiryFields(days),
       createdAt: Date.now(),
       submittedAt: null,
     };
@@ -438,6 +475,17 @@ export const sharesService = {
     const next: ShareRecord = { ...rec };
     if (file === null) delete next.hero;
     else next.hero = file;
+    await putShare(next);
+    return toSummary(next);
+  },
+
+  /** Change how long a link works, counted from now (null = never). Also how
+   *  an expired link is revived: nothing is deleted when a link expires. */
+  async setExpiry(id: string, days: number | null): Promise<ShareSummary> {
+    await loadShares();
+    const rec = getShareById(id);
+    if (!rec) throw new AppError('Share not found', 404);
+    const next: ShareRecord = { ...rec, ...expiryFields(checkDays(days)) };
     await putShare(next);
     return toSummary(next);
   },
@@ -468,7 +516,13 @@ export const sharesService = {
     await fs.mkdir(thumbsDirFor(rec.id), { recursive: true });
     await mapLimit(finalOf(rec), RENDER_CONCURRENCY, (name) =>
       renderPreview(editedDir, name, previewsDirFor(rec.id), thumbsDirFor(rec.id), false));
-    const next: ShareRecord = { ...rec, phase: 'delivery' };
+    // Delivery restarts the clock with the link's chosen length, so a picking
+    // link sent weeks ago doesn't die days after the finals land.
+    const next: ShareRecord = {
+      ...rec,
+      phase: 'delivery',
+      ...(rec.expiryDays != null ? expiryFields(rec.expiryDays) : {}),
+    };
     await putShare(next);
     return toSummary(next);
   },

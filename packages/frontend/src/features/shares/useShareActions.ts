@@ -32,6 +32,12 @@ export function useShareActions() {
     onSuccess: (_d, v) => { void invalidate(); flash(setCoverSavedId, v.id); },
     onError: () => toast.error('Could not change the cover photo'),
   });
+  const [expirySavedId, setExpirySavedId] = useState<string | null>(null);
+  const expiryMut = useMutation({
+    mutationFn: ({ id, days }: { id: string; days: number | null }) => api.post(`/gallery/shares/${id}/expiry`, { days }),
+    onSuccess: (_d, v) => { void invalidate(); flash(setExpirySavedId, v.id); },
+    onError: () => toast.error('Could not change the expiry'),
+  });
   const revokeMut = useMutation({
     mutationFn: (id: string) => api.delete(`/gallery/shares/${id}`),
     onSuccess: () => void invalidate(),
@@ -68,6 +74,10 @@ export function useShareActions() {
     /** Set the delivery page cover (null = the first delivered photo). */
     setCover: (s: ShareSummary, file: string | null) => coverMut.mutate({ id: s.id, file }),
     coverSavedId,
+    /** Make the link last `days` from today (null = never). */
+    setExpiry: (s: ShareSummary, days: number | null) => expiryMut.mutate({ id: s.id, days }),
+    expirySavedId,
+    expiryPending: (s: ShareSummary) => expiryMut.isPending && expiryMut.variables?.id === s.id,
     refreshing: (s: ShareSummary) => refreshMut.isPending && refreshMut.variables?.id === s.id,
     refreshProgress,
     revoking: revokeMut.isPending,

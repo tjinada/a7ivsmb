@@ -248,6 +248,7 @@ export interface ShareSummary {
   final: string[];          // the client's final picks (subset of selections)
   deliverable: string[];    // files the client can download (empty until delivery)
   activity: ShareActivity;  // what the client has done with the link
+  expiresAt: number | null; // epoch ms the link stops working; null = never
   url: string;              // public client link (absolute when SHARE_HOST set)
   createdAt: number;        // epoch ms
   submittedAt: number | null;
@@ -301,5 +302,6 @@ export interface SharePublicState {
   finalCount: number;       // final picks chosen so far
   items: SharePublicItem[];
   hero: string | null;      // delivery page banner photo (owner's cover or the first delivered); null before delivery
+  expiresAt: number | null; // epoch ms the link stops working; null = never
   downloadBytes?: number;   // delivery phase: total size of the downloadable originals
 }

@@ -574,6 +574,10 @@
     const date = fmtDate(state.date);
     const brand = esc(state.brandName);
     const meta = plural(files.length, 'photo') + ' · full resolution';
+    // Links with an expiry say when, so people download before it lapses.
+    const until = state.expiresAt
+      ? new Date(state.expiresAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+      : '';
     app.replaceChildren(el(
       '<div class="dv">'
       + '<header class="hero">'
@@ -582,7 +586,8 @@
       + '<div class="hero-text"><h1>' + esc(state.title) + '</h1>' + (date ? '<p>' + esc(date) + '</p>' : '') + '</div>'
       + '</header>'
       + '<section class="dv-bar">'
-      + '<div class="dv-ident"><span class="dv-name">' + esc(state.title) + '</span><span class="dv-meta">' + meta + (size ? '<span class="wide-inline"> · ' + size + '</span>' : '') + '</span></div>'
+      + '<div class="dv-ident"><span class="dv-name">' + esc(state.title) + '</span><span class="dv-meta">' + meta + (size ? '<span class="wide-inline"> · ' + size + '</span>' : '') + '</span>'
+      + (until ? '<span class="dv-meta">Available until ' + esc(until) + '</span>' : '') + '</div>'
       + '<div class="dv-act" id="dvAct"></div>'
       + '</section>'
       + '<div class="main dv-main"><div class="grid" id="grid"></div><p id="status" class="status" aria-live="polite"></p></div>'

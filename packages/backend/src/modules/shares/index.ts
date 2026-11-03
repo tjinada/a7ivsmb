@@ -1,4 +1,4 @@
-import { loadShares, getShareBySlug } from './shares.store.js';
+import { loadShares, getShareBySlug, isExpired } from './shares.store.js';
 import { loadActivity } from './shares.activity.js';
 import { logger } from '../../utils/logger.js';
 import type { ShareKind } from '@sonycam/shared';
@@ -25,9 +25,9 @@ export async function initShares(): Promise<void> {
  *  instead of a password gate that can never be unlocked). */
 export async function sharePageMeta(
   slug: string,
-): Promise<{ albumName: string; kind: ShareKind } | null> {
+): Promise<{ albumName: string; kind: ShareKind; expired: boolean } | null> {
   await loadShares();
   const rec = getShareBySlug(slug);
   if (!rec) return null;
-  return { albumName: rec.albumName, kind: rec.kind ?? 'proofing' };
+  return { albumName: rec.albumName, kind: rec.kind ?? 'proofing', expired: isExpired(rec) };
 }
