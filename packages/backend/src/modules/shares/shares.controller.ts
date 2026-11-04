@@ -204,6 +204,19 @@ export const sharesController = {
     }
   },
 
+  /** The cover banner. ?f= (the cover's filename) only busts caches when the
+   *  owner changes the cover; the server always sends the current one. */
+  async cover(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { data, type } = await sharesService.cover(req.params.slug);
+      res.set('Content-Type', type);
+      res.set('Cache-Control', 'private, max-age=86400');
+      res.send(data);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async preview(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { data, type } = await sharesService.preview(req.params.slug, req.params.file);

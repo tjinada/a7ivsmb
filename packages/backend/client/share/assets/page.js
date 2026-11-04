@@ -58,6 +58,9 @@
   const thumbUrl = (f) => API + '/thumb/' + encodeURIComponent(f) + '?' + THUMB_REV + ver().replace('?', '&');
   const previewUrl = (f) => API + '/preview/' + encodeURIComponent(f) + ver();
   const downloadUrl = (f) => API + '/download/' + encodeURIComponent(f);
+  // The delivery cover banner: a larger, higher-quality render than the
+  // previews. ?f= changes the URL when the owner picks a different cover.
+  const coverUrl = (f) => API + '/cover?f=' + encodeURIComponent(f);
 
   function fmtBytes(n) {
     if (!n) return '';
@@ -588,7 +591,7 @@
     app.replaceChildren(el(
       '<div class="dv">'
       + '<header class="hero">'
-      + (files.length ? '<img class="hero-img" alt="" fetchpriority="high" src="' + previewUrl(state.hero || files[0].file) + '"/>' : '')
+      + (files.length ? '<img class="hero-img" alt="" fetchpriority="high" src="' + coverUrl(state.hero || files[0].file) + '"/>' : '')
       + (brand ? '<div class="hero-brand">' + brand + '</div>' : '')
       + '<div class="hero-text"><h1>' + esc(state.title) + '</h1>' + (date ? '<p>' + esc(date) + '</p>' : '') + '</div>'
       + '</header>'
@@ -606,6 +609,9 @@
     if (hero) {
       // Set via CSSOM, not a style attribute, so a strict CSP stays possible.
       hero.style.objectPosition = focusPct(state.heroFocus);
+      // The big cover file is rendered on demand; if it can't be had, show
+      // the regular preview instead of an empty banner.
+      hero.onerror = () => { hero.onerror = null; hero.src = previewUrl(state.hero || files[0].file); };
       hero.onload = () => hero.classList.add('ok');
       if (hero.complete) hero.classList.add('ok');
     }

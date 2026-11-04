@@ -89,6 +89,10 @@ export const config = {
     // full-bleed cover or a 2.5x zoom needs the pixels.
     deliveryPreviewMaxEdge: Number(process.env.SHARE_DELIVERY_PREVIEW_MAX_EDGE ?? 2560),
     deliveryPreviewQuality: Number(process.env.SHARE_DELIVERY_PREVIEW_QUALITY ?? 88),
+    // The delivery page's cover banner: one file per link, rendered from the
+    // original, big enough for a retina desktop's full-width hero.
+    coverMaxEdge: Number(process.env.SHARE_COVER_MAX_EDGE ?? 3840),
+    coverQuality: Number(process.env.SHARE_COVER_QUALITY ?? 92),
     watermarkText: process.env.SHARE_WATERMARK_TEXT ?? 'Preview',
     cookieTtlDays: Number(process.env.SHARE_COOKIE_TTL_DAYS ?? 7),
     // Who the client page says the gallery is from, and what it tells them

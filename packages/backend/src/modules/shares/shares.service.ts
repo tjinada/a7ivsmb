@@ -27,6 +27,7 @@ import { progressStart, progressTick, progressEnd } from './shares.progress.js';
 import { loadActivity, activityOf, deleteActivity } from './shares.activity.js';
 import { compareNames } from '../../utils/naturalOrder.js';
 import { albumTitle } from './albumTitle.js';
+import { logger } from '../../utils/logger.js';
 
 const JPG_EXTS = new Set(['.jpg', '.jpeg']);
 const EDITED_DIR = 'Edited';
@@ -126,11 +127,55 @@ function previewNameFor(file: string): string {
   return `${path.parse(file).name}.webp`;
 }
 
+/** Absolute path to a share's cover-banner folder. Keyed by size, like the
+ *  thumbs, so changing SHARE_COVER_MAX_EDGE starts fresh. */
+function coverDirFor(id: string): string {
+  return path.join(config.dataDir, 'shares', id, `cover-${config.shares.coverMaxEdge}`);
+}
+
+/** In-flight cover renders, so a warm-up and a first request share one job. */
+const coverJobs = new Map<string, Promise<string>>();
+
+/** The cover banner for one photo of a share, rendered from the original
+ *  (large, high quality) on first need and cached on disk. Re-rendered if the
+ *  edited original is newer than the cached file. Returns its path. */
+function renderCover(rec: ShareRecord, file: string): Promise<string> {
+  const out = path.join(coverDirFor(rec.id), previewNameFor(file));
+  const running = coverJobs.get(out);
+  if (running) return running;
+  const job = (async () => {
+    const src = path.join(safeAlbumDir(rec.albumPath), EDITED_DIR, file);
+    const [srcStat, outStat] = await Promise.all([fs.stat(src), fs.stat(out).catch(() => null)]);
+    if (outStat && outStat.mtimeMs >= srcStat.mtimeMs) return out;
+    const { coverMaxEdge, coverQuality } = config.shares;
+    await fs.mkdir(coverDirFor(rec.id), { recursive: true });
+    const tmp = `${out}.tmp`;
+    await sharp(src, { failOn: 'none' })
+      .rotate()
+      .resize({ width: coverMaxEdge, height: coverMaxEdge, fit: 'inside', withoutEnlargement: true })
+      .withIccProfile('srgb')
+      .webp({ quality: coverQuality })
+      .toFile(tmp);
+    await fs.rename(tmp, out);
+    return out;
+  })().finally(() => coverJobs.delete(out));
+  coverJobs.set(out, job);
+  return job;
+}
+
+/** Render the link's current cover in the background (after it's chosen or
+ *  delivery opens), so the client's first visit doesn't wait on it. */
+function warmCover(rec: ShareRecord): void {
+  const file = heroOf(rec);
+  if (!file) return;
+  renderCover(rec, file).catch((err) => logger.error(`Cover render failed for ${file}`, 'Shares', err));
+}
+
 type Dims = { w: number; h: number };
 type Rendered = { name: string; dims: Dims };
 
 /** Write the grid thumbnail for one item from its (already resized, already
- *  watermarked) preview buffer. Cheap: the preview is at most 1600 px. */
+ *  watermarked) preview buffer. Cheap: the preview is already downscaled. */
 async function writeThumb(previewBuf: Buffer, out: string): Promise<void> {
   const edge = config.shares.thumbMaxEdge;
   await sharp(previewBuf)
@@ -472,6 +517,7 @@ export const sharesService = {
       submittedAt: null,
     };
     await putShare(rec);
+    warmCover(rec);
     return toSummary(rec);
   },
 
@@ -496,6 +542,7 @@ export const sharesService = {
     if (focus !== undefined) next.heroFocus = checkFocus(focus);
     else if (heroOf(next) !== heroOf(rec)) delete next.heroFocus;
     await putShare(next);
+    warmCover(next);
     return toSummary(next);
   },
 
@@ -544,6 +591,7 @@ export const sharesService = {
       ...(rec.expiryDays != null ? expiryFields(rec.expiryDays) : {}),
     };
     await putShare(next);
+    warmCover(next);
     return toSummary(next);
   },
 
@@ -576,6 +624,7 @@ export const sharesService = {
       delete next.heroFocus;
     }
     await putShare(next);
+    warmCover(next); // the cover may be a different photo, or a re-exported one
     return toSummary(next);
   },
 
@@ -674,6 +723,24 @@ export const sharesService = {
     }
     await fs.mkdir(thumbsDirFor(rec.id), { recursive: true });
     await writeThumb(preview, abs);
+    return { data: await fs.readFile(abs), type: 'image/webp' };
+  },
+
+  /** Serve the delivery page's cover banner (large webp). Only ever the link's
+   *  current cover, so it can't fetch other photos at this size. */
+  async cover(slug: string): Promise<{ data: Buffer; type: string }> {
+    await loadShares();
+    const rec = requireBySlug(slug);
+    const file = heroOf(rec);
+    if (!file) throw new AppError('Not found', 404);
+    let abs: string;
+    try {
+      abs = await renderCover(rec, file);
+    } catch (err) {
+      // Original missing or undecodable: the page falls back to the preview.
+      logger.error(`Cover render failed for ${file}`, 'Shares', err);
+      throw new AppError('Cover not available', 404);
+    }
     return { data: await fs.readFile(abs), type: 'image/webp' };
   },
 

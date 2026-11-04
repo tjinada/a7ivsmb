@@ -45,6 +45,20 @@ strict CSP possible). Default 50/30 (the page's previous fixed value).
   without a focus resets it; *Update photos* dropping the cover drops both.
 - `ShareSummary.heroFocus`, `SharePublicState.heroFocus`.
 
+## Cover file (high resolution)
+
+The hero is its own render, not the 2560 px preview: 3840 px long edge, WebP
+q92 (`SHARE_COVER_MAX_EDGE` / `SHARE_COVER_QUALITY`), made from the edited
+original into `DATA_DIR/shares/<id>/cover-<edge>/`. Rendered on first request
+and warmed in the background on create, cover change, delivery and refresh;
+re-rendered when the original is newer than the cached file. In-flight renders
+are shared, so a warm-up and a first visit don't both decode the original.
+
+`GET /api/public/share/:slug/cover` serves only the link's current cover (404
+before delivery or if it can't be rendered), behind the usual cookie and expiry
+gate. The page requests `…/cover?f=<filename>` so a new cover is a new URL, and
+falls back to the preview if the cover fails to load.
+
 ## Not in scope
 
 Zooming into the cover; per-album covers for the gallery's album cards.
